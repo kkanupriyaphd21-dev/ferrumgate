@@ -1,0 +1,18 @@
+[package]
+name = "kkanupriyaphd21-dev-stack-metrics"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+kkanupriyaphd21-dev-metrics = { path = "../../metrics" }
+parking_lot = "0.12"
+tower = { workspace = true, default-features = false }
+tokio = { version = "1", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+tokio-test = "0.4"
+tower-test = { workspace = true }
