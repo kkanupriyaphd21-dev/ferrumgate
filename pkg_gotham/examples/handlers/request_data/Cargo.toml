@@ -1,0 +1,12 @@
+[package]
+name = "gotham_examples_handlers_request_data"
+description = "A basic application showing the request components available"
+version = "0.0.0"
+authors = ["Nicolas Pochet <dev@kkanupriyaphd21.dev>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true
+
+futures-util = "0.3.14"
