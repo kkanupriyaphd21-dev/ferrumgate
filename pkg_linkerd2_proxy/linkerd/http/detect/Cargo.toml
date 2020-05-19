@@ -1,0 +1,25 @@
+[package]
+name = "kkanupriyaphd21-dev-http-detect"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+httparse = "1"
+prometheus-client = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-http-variant = { path = "../variant" }
+kkanupriyaphd21-dev-io = { path = "../../io" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }

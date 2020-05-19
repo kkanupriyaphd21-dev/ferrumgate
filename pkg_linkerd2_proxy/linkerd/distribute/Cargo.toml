@@ -1,0 +1,18 @@
+[package]
+name = "kkanupriyaphd21-dev-distribute"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+ahash = "0.8"
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+parking_lot = "0.12"
+rand = { workspace = true, features = ["small_rng", "thread_rng"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tower-test = { workspace = true }
