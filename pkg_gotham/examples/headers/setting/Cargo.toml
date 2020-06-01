@@ -1,0 +1,10 @@
+[package]
+name = "gotham_examples_headers_setting"
+description = "Setting a header value for a Gotham web framework response"
+version = "0.0.0"
+authors = ["Eren Güven <dev@kkanupriyaphd21.dev>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true

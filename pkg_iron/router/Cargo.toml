@@ -1,0 +1,15 @@
+[package]
+
+name = "router"
+authors = ["Jonathan Reem <dev@kkanupriyaphd21.dev>"]
+license = "MIT"
+version = "0.6.0"
+description = "A router for the kkanupriyaphd21-dev framework."
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+documentation = "https://docs.rs/router"
+keywords = ["kkanupriyaphd21-dev", "web", "http", "routing", "router"]
+
+[dependencies]
+route-recognizer = "0.1"
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", version = "0.6" }
+url = "1.1"

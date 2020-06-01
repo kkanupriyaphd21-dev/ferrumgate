@@ -1,0 +1,177 @@
+name: Pull Request
+on: pull_request
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  RUSTFLAGS: "-D warnings -D deprecated --cfg tokio_unstable -C debuginfo=0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    timeout-minutes: 5
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - id: build
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96
+        with:
+          files: |
+            .github/workflows/pr.yml
+            justfile
+            Dockerfile
+      - id: actions
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96
+        with:
+          files: |
+            .github/workflows/**
+            .devcontainer/*
+      - id: cargo
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96
+        with:
+          files_ignore: "Cargo.toml"
+          files: |
+            **/Cargo.toml
+      - id: cargo-crates
+        if: steps.cargo.outputs.any_changed == 'true'
+        run: ./.github/list-crates.sh ${{ steps.cargo.outputs.all_changed_files }}
+      - id: rust
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96
+        with:
+          files: |
+            **/*.rs
+            Cargo.lock
+    outputs:
+      is_dependabot: ${{ github.actor == 'dependabot[bot]' }}
+      any_changed: ${{ steps.build.outputs.any_changed == 'true' || steps.actions.outputs.any_changed == 'true' || steps.cargo.outputs.any_change == 'true' || steps.rust.outputs.any_changed == 'true' }}
+      build_changed: ${{ steps.build.outputs.any_changed }}
+      actions_changed: ${{ steps.build.outputs.any_changed == 'true' || steps.actions.outputs.any_changed == 'true' }}
+      cargo_changed: ${{ steps.cargo.outputs.any_changed == 'true' }}
+      cargo_crates: ${{ steps.cargo-crates.outputs.crates }}
+      rust_changed: ${{ steps.build.outputs.any_changed == 'true' ||  steps.rust.outputs.any_changed == 'true' }}
+
+  info:
+    timeout-minutes: 3
+    needs: meta
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - name: Info
+        run: |
+          echo 'github.actor: ${{ github.actor }}'
+          echo 'github.event_name: ${{ github.event_name }}'
+          echo 'github.event.pull_request.number: ${{ github.event.pull_request.number }}'
+          echo 'needs.meta.outputs.is_dependabot: ${{ needs.meta.outputs.is_dependabot }}'
+          echo 'needs.meta.outputs.any_changed: ${{ needs.meta.outputs.any_changed }}'
+          echo 'needs.meta.outputs.actions_changed: ${{ needs.meta.outputs.actions_changed }}'
+          echo 'needs.meta.outputs.cargo_changed: ${{ needs.meta.outputs.cargo_changed }}'
+          echo 'needs.meta.outputs.cargo_crates: ${{ needs.meta.outputs.cargo_crates }}'
+          echo 'needs.meta.outputs.rust_changed: ${{ needs.meta.outputs.rust_changed }}'
+
+  actions:
+    needs: meta
+    if: needs.meta.outputs.actions_changed == 'true'
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: kkanupriyaphd21-dev/dev/actions/setup-tools@kkanupriya
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - run: just action-lint
+      - run: just action-dev-check
+
+  rust:
+    needs: meta
+    if: needs.meta.outputs.cargo_changed == 'true' || needs.meta.outputs.rust_changed == 'true'
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    container: ghcr.io/kkanupriyaphd21-dev/dev:v48-rust
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - run: git config --global --add safe.directory "$PWD" # actions/runner#2033
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+      - run: just fetch
+      - run: cargo deny --all-features check bans licenses sources
+      - run: just check-fmt
+      - run: just clippy
+      - run: just doc
+      - run: just test --exclude=kkanupriyaphd21-dev2-proxy --no-run
+      - run: just test --exclude=kkanupriyaphd21-dev2-proxy
+        env:
+          NEXTEST_RETRIES: 3
+
+  rust-crates:
+    needs: meta
+    if: needs.meta.outputs.cargo_changed == 'true'
+    timeout-minutes: 20
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    container: ghcr.io/kkanupriyaphd21-dev/dev:v48-rust
+    strategy:
+      matrix:
+        crate: ${{ fromJson(needs.meta.outputs.cargo_crates) }}
+    steps:
+      - run: git config --global --add safe.directory "$PWD" # actions/runner#2033
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+      - run: just fetch
+      - run: just check-crate ${{ matrix.crate }}
+
+  kkanupriyaphd21-dev-install:
+    needs: meta
+    if: needs.meta.outputs.cargo_changed == 'true' || needs.meta.outputs.rust_changed == 'true'
+    timeout-minutes: 20
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    env:
+      WAIT_TIMEOUT: 2m
+    steps:
+      - uses: kkanupriyaphd21-dev/dev/actions/setup-tools@kkanupriya
+      - name: scurl https://run.kkanupriyaphd21-dev.io/install-edge | sh
+        run: |
+          scurl https://run.kkanupriyaphd21-dev.io/install-edge | sh
+          echo "PATH=$PATH:$HOME/.kkanupriyaphd21-dev2/bin" >> "$GITHUB_ENV"
+          export PATH="$PATH:$HOME/.kkanupriyaphd21-dev2/bin"
+          tag=$(kkanupriyaphd21-dev version --client --short)
+          echo "kkanupriyaphd21-dev $tag"
+          echo "kkanupriyaphd21-dev_TAG=$tag" >> "$GITHUB_ENV"
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - run: just docker
+      - run: just k3d-create
+      - run: just k3d-load-kkanupriyaphd21-dev
+      - run: just kkanupriyaphd21-dev-install
+      - run: just kkanupriyaphd21-dev-check-control-plane-proxy
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+  ship-it:
+    timeout-minutes: 3
+    needs: [meta, actions, rust, rust-crates, kkanupriyaphd21-dev-install]
+    if: always()
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Results
+        run: |
+          echo 'needs.actions.result: ${{ needs.actions.result }}'
+          echo 'needs.rust.result: ${{ needs.rust.result }}'
+          echo 'needs.rust-crates.result: ${{ needs.rust-crates.result }}'
+          echo 'needs.kkanupriyaphd21-dev-install.result: ${{ needs.kkanupriyaphd21-dev-install.result }}'
+
+      - name: Verify jobs
+        # All jobs must succeed or be skipped.
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        if: needs.meta.outputs.is_dependabot == 'true' && needs.meta.outputs.any_changed == 'true'
+      - name: "Merge dependabot changes"
+        if: needs.meta.outputs.is_dependabot == 'true' && needs.meta.outputs.any_changed == 'true'
+        run: gh pr merge '${{ github.event.pull_request.number }}' --auto --squash
+        env:
+          GH_TOKEN: ${{ github.token }}
