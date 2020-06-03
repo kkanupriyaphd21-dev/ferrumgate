@@ -1,0 +1,3 @@
+owners = ["github:kkanupriyaphd21-dev:Admins", "github:rust-cli:Maintainers"]
+dependent-version = "fix"
+allow-branch = ["master", "v*-master"]
