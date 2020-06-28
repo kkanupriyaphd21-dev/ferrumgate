@@ -1,0 +1,19 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-identity-client"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+kkanupriyaphd21-dev2-proxy-api = { workspace = true, features = ["identity"] }
+kkanupriyaphd21-dev-dns-name = { path = "../../dns/name" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+thiserror = "2"
+tokio = { version = "1", features = ["time", "sync"] }
+tonic = { workspace = true, default-features = false }
+tracing = { workspace = true }
+http-body = { workspace = true }

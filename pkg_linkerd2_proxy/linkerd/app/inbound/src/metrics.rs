@@ -1,0 +1,112 @@
+//! Inbound proxy metrics.
+//!
+//! While this module is very similar to `outbound::metrics`, it is bound to `inbound_`-prefixed
+//! metrics and derives its labels from inbound-specific types. Eventually, we won't rely on the
+//! legacy `proxy` metrics and all inbound metrics will be defined in this module.
+//!
+//! TODO(ver) We use a `Mutex` to store our error metrics because we don't expect these registries
+//! to be updated frequently or in a performance-critical area. We should probably look to use
+//! `DashMap` as we migrate other metrics registries.
+
+pub(crate) mod authz;
+pub(crate) mod error;
+
+use crate::http::router::metrics::{
+    count_reqs::RequestCountFamilies, req_body::RequestBodyFamilies,
+    req_duration::RequestDurationFamilies, rsp_body::ResponseBodyFamilies,
+    rsp_duration::ResponseDurationFamilies, status::StatusCodeFamilies,
+};
+
+pub use kkanupriyaphd21-dev_app_core::metrics::*;
+
+/// Holds LEGACY inbound proxy metrics.
+#[derive(Clone, Debug)]
+pub struct InboundMetrics {
+    pub http_authz: authz::HttpAuthzMetrics,
+    pub http_errors: error::HttpErrorMetrics,
+
+    pub(crate) tcp_authz: authz::TcpAuthzMetrics,
+    pub tcp_errors: error::TcpErrorMetrics,
+
+    /// Holds metrics that are common to both inbound and outbound proxies. These metrics are
+    /// reported separately
+    pub proxy: Proxy,
+
+    pub detect: crate::detect::MetricsFamilies,
+    pub direct: crate::direct::MetricsFamilies,
+    pub request_count: RequestCountFamilies,
+    pub request_body_data: RequestBodyFamilies,
+    pub request_duration: RequestDurationFamilies,
+    pub response_body_data: ResponseBodyFamilies,
+    pub response_duration: ResponseDurationFamilies,
+    pub status_codes: StatusCodeFamilies,
+}
+
+impl InboundMetrics {
+    pub(crate) fn new(proxy: Proxy, reg: &mut prom::Registry) -> Self {
+        let detect =
+            crate::detect::MetricsFamilies::register(reg.sub_registry_with_prefix("tcp_detect"));
+        let direct = crate::direct::MetricsFamilies::register(
+            reg.sub_registry_with_prefix("tcp_transport_header"),
+        );
+        let request_count = RequestCountFamilies::register(reg);
+        let request_body_data = RequestBodyFamilies::register(reg);
+        let request_duration =
+            RequestDurationFamilies::register(reg, Self::REQUEST_BUCKETS.iter().copied());
+        let response_body_data = ResponseBodyFamilies::register(reg);
+        let response_duration =
+            ResponseDurationFamilies::register(reg, Self::RESPONSE_BUCKETS.iter().copied());
+        let status_codes = StatusCodeFamilies::register(reg);
+
+        Self {
+            http_authz: authz::HttpAuthzMetrics::default(),
+            http_errors: error::HttpErrorMetrics::default(),
+            tcp_authz: authz::TcpAuthzMetrics::default(),
+            tcp_errors: error::TcpErrorMetrics::default(),
+            proxy,
+            detect,
+            direct,
+            request_count,
+            request_body_data,
+            request_duration,
+            response_body_data,
+            response_duration,
+            status_codes,
+        }
+    }
+
+    // There are two histograms for which we need to register metrics:
+    //   (1) request durations, which are measured on routes.
+    //   (2) response durations, which are measured on route-backends.
+    //
+    // Should these change in the future, be sure to consider the outbound proxy's corresponding
+    // constants measuring request and response latency for *outgoing* traffic.
+
+    /// Histogram buckets for request latency.
+    ///
+    /// Because request duration is the more meaningful metric operationally for the inbound
+    /// proxy, we opt to preserve higher fidelity for request durations (especially for lower
+    /// values).
+    const REQUEST_BUCKETS: &'static [f64] = &[0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 10.0];
+
+    /// Histogram buckets for response latency.
+    ///
+    /// These buckets for this histogram are coarser than those of [`Self::REQUEST_BUCKETS`],
+    /// eliding several buckets for short response durations to be conservative about the costs of
+    /// tracking two histograms' respective time series.
+    const RESPONSE_BUCKETS: &'static [f64] = &[0.05, 0.5, 1.0, 10.0];
+}
+
+impl legacy::FmtMetrics for InboundMetrics {
+    fn fmt_metrics(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.http_authz.fmt_metrics(f)?;
+        self.http_errors.fmt_metrics(f)?;
+
+        self.tcp_authz.fmt_metrics(f)?;
+        self.tcp_errors.fmt_metrics(f)?;
+
+        // XXX: Proxy metrics are reported elsewhere.
+
+        Ok(())
+    }
+}
