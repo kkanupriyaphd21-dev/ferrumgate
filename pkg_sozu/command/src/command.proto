@@ -1,0 +1,1644 @@
+syntax = "proto2";
+package command;
+
+// JSON state-file forward compat: `SaveState`/`LoadState` write
+// `WorkerRequest`s as `\n\0`-separated JSON records. Older clients (e.g.
+// `sozu-command-lib = "1.1.1"`) emit only the field set their schema knew,
+// so missing `repeated` / `map` fields must default to empty when the
+// current schema deserializes them. New schema rules:
+//   - new fields must be additive — proto2 `optional`, or `repeated`/`map`,
+//   - never rename or change the type of an existing field,
+//   - when adding a `repeated` or `map` field to a message that appears in
+//     a state file (anything emitted by `ConfigState::generate_requests` or
+//     carried in a `RequestType` an external client may build), add the
+//     matching `field_attribute(... "#[serde(default)]")` line in
+//     `command/build.rs`. Required scalars stay strict on purpose so
+//     malformed records still fail before dispatch.
+// Regression guard: `command/tests/state_compat_v1_1_1.rs`.
+
+// A message received by Sōzu to change its state or query information
+message Request {
+  oneof request_type {
+    // This message tells Sōzu to dump the current proxy state (backends,
+    // front domains, certificates, etc) as a list of JSON-serialized Requests,
+    // separated by a 0 byte, to a file. This file can be used later
+    // to bootstrap the proxy. This message is not forwarded to workers.
+    // If the specified path is relative, it will be calculated relative to the current
+    // working directory of the proxy.
+    string save_state = 1;
+    // load a state file, given its path
+    string load_state = 2;
+    // list the workers and their status
+    ListWorkers list_workers = 4;
+    // list the frontends, filtered by protocol and/or domain
+    FrontendFilters list_frontends = 5;
+    // list all listeners
+    ListListeners list_listeners = 6;
+    // launch a new worker
+    // never implemented, the tag is unused and probably not needed
+    // we may still implement it later with no paramater
+    // the main process will automatically assign a new id to a new worker
+    string launch_worker = 7;
+    // upgrade the main process
+    UpgradeMain upgrade_main = 8;
+    // upgrade an existing worker, giving its id
+    uint32 upgrade_worker = 9;
+    // subscribe to proxy events
+    SubscribeEvents subscribe_events = 10;
+    // reload the configuration from the config file, or a new file
+    // CHECK: this used to be an option. None => use the config file, Some(string) => path_to_file
+    // make sure it works using "" and "path_to_file"
+    string reload_configuration = 11;
+    // give status of main process and all workers
+    Status status = 12;
+    // add a cluster
+    Cluster add_cluster = 13;
+    // remove a cluster giving its id
+    string remove_cluster = 14;
+    // add an HTTP frontend
+    RequestHttpFrontend add_http_frontend = 15;
+    // remove an HTTP frontend
+    RequestHttpFrontend remove_http_frontend = 16;
+    // add an HTTPS frontend
+    RequestHttpFrontend add_https_frontend = 17;
+    // remove an HTTPS frontend
+    RequestHttpFrontend remove_https_frontend = 18;
+    // add a certificate
+    AddCertificate add_certificate = 19;
+    // replace a certificate
+    ReplaceCertificate replace_certificate = 20;
+    // remove a certificate
+    RemoveCertificate remove_certificate = 21;
+    // add a TCP frontend
+    RequestTcpFrontend add_tcp_frontend = 22;
+    // remove a TCP frontend
+    RequestTcpFrontend remove_tcp_frontend = 23;
+    // add a backend
+    AddBackend add_backend = 24;
+    // remove a backend
+    RemoveBackend remove_backend = 25;
+    // add an HTTP listener
+    HttpListenerConfig add_http_listener = 26;
+    // add an HTTPS listener
+    HttpsListenerConfig add_https_listener = 27;
+    // add a TCP listener
+    TcpListenerConfig add_tcp_listener = 28;
+    // remove a listener
+    RemoveListener remove_listener = 29;
+    // activate a listener
+    ActivateListener activate_listener = 30;
+    // deactivate a listener
+    DeactivateListener deactivate_listener = 31;
+    // query a cluster by id
+    string query_cluster_by_id = 35;
+    // query clusters with a hostname and optional path
+    QueryClusterByDomain query_clusters_by_domain = 36;
+    // query clusters hashes
+    QueryClustersHashes query_clusters_hashes = 37;
+    // query metrics
+    QueryMetricsOptions query_metrics = 38;
+    // soft stop
+    SoftStop soft_stop = 39;
+    // hard stop
+    HardStop hard_stop = 40;
+    // enable, disable or clear the metrics 
+    MetricsConfiguration configure_metrics = 41;
+    // Change the logging level
+    string Logging = 42;
+    // Return the listen sockets
+    ReturnListenSockets return_listen_sockets = 43;
+    // Get certificates from the state (rather than from the workers)
+    QueryCertificatesFilters query_certificates_from_the_state = 44;
+    // Get certificates from the workers (rather than from the state)
+    QueryCertificatesFilters query_certificates_from_workers = 45;
+    // query the state about how many requests of each type has been received
+    // since startup
+    CountRequests count_requests = 46;
+    // patch a running HTTP listener in place (no socket re-bind)
+    UpdateHttpListenerConfig update_http_listener = 47;
+    // patch a running HTTPS listener in place (no socket re-bind)
+    UpdateHttpsListenerConfig update_https_listener = 48;
+    // patch a running TCP listener in place (no socket re-bind)
+    UpdateTcpListenerConfig update_tcp_listener = 49;
+    // set the global per-(cluster, source-IP) connection limit at
+    // runtime. `0` is "unlimited". Per-cluster overrides set on the
+    // `Cluster` message take precedence at admit time.
+    uint64 set_max_connections_per_ip = 50;
+    // query the current global per-(cluster, source-IP) connection
+    // limit. Workers reply with `MaxConnectionsPerIpLimit`.
+    QueryMaxConnectionsPerIp query_max_connections_per_ip = 51;
+    // set or update the health check configuration for a cluster.
+    // Tags 47-49 carry in-place listener patches (HTTP/HTTPS/TCP) and
+    // 50-51 carry the per-(cluster, source-IP) connection-limit
+    // request/query, so health-check verbs start at 52.
+    SetHealthCheck set_health_check = 52;
+    // remove the health check configuration from a cluster.
+    string remove_health_check = 53;
+    // list health check configurations (optional cluster id filter).
+    QueryHealthChecks query_health_checks = 54;
+  }
+}
+
+message QueryHealthChecks {
+    optional string cluster_id = 1;
+}
+
+message SetHealthCheck {
+    required string cluster_id = 1;
+    required HealthCheckConfig config = 2;
+}
+
+message ListWorkers {}
+message ListListeners {}
+message UpgradeMain {}
+message SubscribeEvents {}
+message Status {}
+message QueryClustersHashes {}
+message SoftStop {}
+message HardStop {}
+message ReturnListenSockets {}
+message CountRequests {}
+message QueryMaxConnectionsPerIp {}
+
+// Wrapper message to distinguish "absent" (preserve) from "present but empty"
+// (reset to default) for ALPN protocols. A bare `repeated string` cannot make
+// this distinction in proto2 since field absence is not detectable for repeated
+// scalars without a sentinel.
+message AlpnProtocols {
+    repeated string values = 1;
+}
+
+// Partial-update patch for a running HTTP listener.
+// Only fields that are `Some` in the patch will be applied;
+// absent fields preserve their current value on the listener.
+// Bind-only fields (address, active) are intentionally absent — use
+// RemoveListener + AddHttpListener to change them.
+message UpdateHttpListenerConfig {
+    // identifies the listener to patch (required — used as key)
+    required SocketAddress address = 1;
+
+    optional SocketAddress public_address = 2;
+    optional bool expect_proxy = 3;
+    optional string sticky_name = 4;
+    // client inactive time, in seconds
+    optional uint32 front_timeout = 5;
+    // backend server inactive time, in seconds
+    optional uint32 back_timeout = 6;
+    // time to connect to the backend, in seconds
+    optional uint32 connect_timeout = 7;
+    // max time to send a complete request, in seconds
+    optional uint32 request_timeout = 8;
+    // DEPRECATED: per-status answer message. Prefer the `answers` map at
+    // field 38. Kept on the wire so older managers can still patch a running
+    // listener for one minor; on the worker side both fields are merged.
+    optional CustomHttpAnswers http_answers = 9;
+
+    // H2 flood thresholds — see HttpListenerConfig for semantics & CVE refs.
+    // All values must be >= 1 (validated server-side before applying).
+    // Maximum RST_STREAM frames per second window (CVE-2023-44487, CVE-2019-9514)
+    optional uint32 h2_max_rst_stream_per_window     = 20;
+    // Maximum PING frames per second window (CVE-2019-9512)
+    optional uint32 h2_max_ping_per_window           = 21;
+    // Maximum SETTINGS frames per second window (CVE-2019-9515)
+    optional uint32 h2_max_settings_per_window       = 22;
+    // Maximum empty DATA frames per second window (CVE-2019-9518)
+    optional uint32 h2_max_empty_data_per_window     = 23;
+    // Maximum CONTINUATION frames per header block (CVE-2024-27316)
+    optional uint32 h2_max_continuation_frames       = 24;
+    // Maximum accumulated protocol anomalies before ENHANCE_YOUR_CALM
+    optional uint32 h2_max_glitch_count              = 25;
+    // Connection-level receive window size in bytes (RFC 9113 §6.9.2)
+    optional uint32 h2_initial_connection_window     = 26;
+    // Maximum concurrent H2 streams (SETTINGS_MAX_CONCURRENT_STREAMS); >= 1
+    optional uint32 h2_max_concurrent_streams        = 27;
+    // Shrink threshold ratio for recycled stream slots; >= 1
+    optional uint32 h2_stream_shrink_ratio           = 28;
+    // Absolute lifetime cap on RST_STREAM frames received (CVE-2023-44487)
+    optional uint64 h2_max_rst_stream_lifetime       = 29;
+    // Lifetime cap on abusive RST_STREAM frames — Rapid Reset signature
+    optional uint64 h2_max_rst_stream_abusive_lifetime   = 30;
+    // Absolute lifetime cap on RST_STREAM frames emitted by the server (CVE-2025-8671)
+    optional uint64 h2_max_rst_stream_emitted_lifetime   = 31;
+    // Maximum HPACK-decoded header list size per request (RFC 9113 §6.5.2)
+    optional uint32 h2_max_header_list_size          = 32;
+    // Maximum HPACK dynamic table size accepted from the peer
+    optional uint32 h2_max_header_table_size         = 33;
+    // Per-stream idle timeout in seconds
+    optional uint32 h2_stream_idle_timeout_seconds   = 34;
+    // Maximum wall-clock seconds to wait after GOAWAY(NO_ERROR). 0 = wait forever.
+    optional uint32 h2_graceful_shutdown_deadline_seconds = 35;
+    // Maximum connection-level (stream 0) WINDOW_UPDATE frames per window; >= 1
+    optional uint32 h2_max_window_update_stream0_per_window = 36;
+    // Name of the correlation header injected per request (e.g. "Sozu-Id")
+    optional string sozu_id_header                   = 37;
+    // Per-status HTTP answer template bodies, keyed by HTTP status code
+    // (e.g. "503"). Replaces the per-field shape of `CustomHttpAnswers` (field
+    // 9). An entry with an empty value is treated as "preserve current"; an
+    // entry with a non-empty value replaces the listener's stored template
+    // for that status. To clear a status template, recreate the listener.
+    map<string, string> answers                     = 38;
+    // When true, any client-supplied `X-Real-IP` header is stripped from
+    // requests before forwarding (anti-spoofing). See HttpListenerConfig.
+    optional bool elide_x_real_ip                   = 39;
+    // When true, a proxy-generated `X-Real-IP` header carrying the connection
+    // peer IP is appended to every forwarded request. See HttpListenerConfig.
+    optional bool send_x_real_ip                    = 40;
+}
+
+// Partial-update patch for a running HTTPS listener.
+// Only fields that are `Some` in the patch will be applied;
+// absent fields preserve their current value on the listener.
+// Bind-only fields (tls_versions, cipher_list, cipher_suites,
+// signature_algorithms, groups_list, certificate, certificate_chain, key,
+// send_tls13_tickets, active) are intentionally absent — use
+// RemoveListener + AddHttpsListener to change them.
+message UpdateHttpsListenerConfig {
+    // identifies the listener to patch (required — used as key)
+    required SocketAddress address = 1;
+
+    optional SocketAddress public_address = 2;
+    optional bool expect_proxy = 3;
+    optional string sticky_name = 4;
+    // client inactive time, in seconds
+    optional uint32 front_timeout = 5;
+    // backend server inactive time, in seconds
+    optional uint32 back_timeout = 6;
+    // time to connect to the backend, in seconds
+    optional uint32 connect_timeout = 7;
+    // max time to send a complete request, in seconds
+    optional uint32 request_timeout = 8;
+    // DEPRECATED: per-status answer message. Prefer the `answers` map at
+    // field 38. Kept on the wire so older managers can still patch a running
+    // listener for one minor; on the worker side both fields are merged.
+    optional CustomHttpAnswers http_answers = 9;
+
+    // ALPN protocols to advertise during TLS handshake.
+    // Uses a wrapper message so "absent" (preserve) and "present but empty"
+    // (reset to default ["h2","http/1.1"]) are unambiguous. Valid values per
+    // element: "h2", "http/1.1". Validated server-side.
+    optional AlpnProtocols alpn_protocols = 10;
+    // When true, :authority/Host must match the TLS SNI (CWE-346/CWE-444)
+    optional bool strict_sni_binding = 11;
+    // When true, only H2 connections are accepted; HTTP/1.1 is dropped at handshake
+    optional bool disable_http11 = 12;
+
+    // H2 flood thresholds — same numbers/semantics as UpdateHttpListenerConfig.
+    // All values must be >= 1 (validated server-side before applying).
+    // Maximum RST_STREAM frames per second window (CVE-2023-44487, CVE-2019-9514)
+    optional uint32 h2_max_rst_stream_per_window     = 20;
+    // Maximum PING frames per second window (CVE-2019-9512)
+    optional uint32 h2_max_ping_per_window           = 21;
+    // Maximum SETTINGS frames per second window (CVE-2019-9515)
+    optional uint32 h2_max_settings_per_window       = 22;
+    // Maximum empty DATA frames per second window (CVE-2019-9518)
+    optional uint32 h2_max_empty_data_per_window     = 23;
+    // Maximum CONTINUATION frames per header block (CVE-2024-27316)
+    optional uint32 h2_max_continuation_frames       = 24;
+    // Maximum accumulated protocol anomalies before ENHANCE_YOUR_CALM
+    optional uint32 h2_max_glitch_count              = 25;
+    // Connection-level receive window size in bytes (RFC 9113 §6.9.2)
+    optional uint32 h2_initial_connection_window     = 26;
+    // Maximum concurrent H2 streams (SETTINGS_MAX_CONCURRENT_STREAMS); >= 1
+    optional uint32 h2_max_concurrent_streams        = 27;
+    // Shrink threshold ratio for recycled stream slots; >= 1
+    optional uint32 h2_stream_shrink_ratio           = 28;
+    // Absolute lifetime cap on RST_STREAM frames received (CVE-2023-44487)
+    optional uint64 h2_max_rst_stream_lifetime       = 29;
+    // Lifetime cap on abusive RST_STREAM frames — Rapid Reset signature
+    optional uint64 h2_max_rst_stream_abusive_lifetime   = 30;
+    // Absolute lifetime cap on RST_STREAM frames emitted by the server (CVE-2025-8671)
+    optional uint64 h2_max_rst_stream_emitted_lifetime   = 31;
+    // Maximum HPACK-decoded header list size per request (RFC 9113 §6.5.2)
+    optional uint32 h2_max_header_list_size          = 32;
+    // Maximum HPACK dynamic table size accepted from the peer
+    optional uint32 h2_max_header_table_size         = 33;
+    // Per-stream idle timeout in seconds
+    optional uint32 h2_stream_idle_timeout_seconds   = 34;
+    // Maximum wall-clock seconds to wait after GOAWAY(NO_ERROR). 0 = wait forever.
+    optional uint32 h2_graceful_shutdown_deadline_seconds = 35;
+    // Maximum connection-level (stream 0) WINDOW_UPDATE frames per window; >= 1
+    optional uint32 h2_max_window_update_stream0_per_window = 36;
+    // Name of the correlation header injected per request (e.g. "Sozu-Id")
+    optional string sozu_id_header                   = 37;
+    // Per-status HTTP answer template bodies, keyed by HTTP status code
+    // (e.g. "503"). Replaces the per-field shape of `CustomHttpAnswers` (field
+    // 9). An entry with an empty value is treated as "preserve current"; an
+    // entry with a non-empty value replaces the listener's stored template
+    // for that status. To clear a status template, recreate the listener.
+    map<string, string> answers                     = 38;
+    // When true, any client-supplied `X-Real-IP` header is stripped from
+    // requests before forwarding (anti-spoofing). See HttpsListenerConfig.
+    optional bool elide_x_real_ip                   = 39;
+    // When true, a proxy-generated `X-Real-IP` header carrying the connection
+    // peer IP is appended to every forwarded request. See HttpsListenerConfig.
+    optional bool send_x_real_ip                    = 40;
+    // Listener-default HSTS policy (RFC 6797). Full-object replacement on
+    // partial update — when this field is `Some`, the supplied
+    // `HstsConfig` overwrites whatever the listener currently holds; when
+    // absent, the existing policy is preserved. Use
+    // `Some(HstsConfig { enabled: Some(false), .. })` to explicitly
+    // disable HSTS via partial update. Cites RFC 6797 §6.1 (single
+    // header) and §7.2 (HTTPS-only).
+    optional HstsConfig hsts                        = 41;
+}
+
+// Partial-update patch for a running TCP listener.
+// Only fields that are `Some` in the patch will be applied;
+// absent fields preserve their current value on the listener.
+// Bind-only fields (address, active) are intentionally absent.
+message UpdateTcpListenerConfig {
+    // identifies the listener to patch (required — used as key)
+    required SocketAddress address = 1;
+
+    optional SocketAddress public_address = 2;
+    optional bool expect_proxy = 3;
+    // client inactive time, in seconds
+    optional uint32 front_timeout = 4;
+    // backend server inactive time, in seconds
+    optional uint32 back_timeout = 5;
+    // time to connect to the backend, in seconds
+    optional uint32 connect_timeout = 6;
+}
+
+// details of an HTTP listener
+message HttpListenerConfig {
+    required SocketAddress address = 1;
+    optional SocketAddress public_address = 2;
+    required bool expect_proxy = 5 [default = false];
+    required string sticky_name = 6;
+    // client inactive time, in seconds
+    required uint32 front_timeout = 7 [default = 60];
+    // backend server inactive time, in seconds
+    required uint32 back_timeout = 8 [default = 30];
+    // time to connect to the backend, in seconds
+    required uint32 connect_timeout = 9 [default = 3];
+    // max time to send a complete request, in seconds
+    required uint32 request_timeout = 10 [default = 10];
+    // wether the listener is actively listening on its socket
+    required bool active = 11 [default = false];
+    // DEPRECATED: per-status answer message. Prefer the `answers` map at
+    // field 31. Kept on the wire so legacy state files round-trip cleanly;
+    // workers populate both fields and treat them as equivalent on read.
+    optional CustomHttpAnswers http_answers = 12;
+    // H2 flood detection thresholds (CVE mitigations).
+    // All are optional; when absent, built-in defaults are used.
+    // Maximum RST_STREAM frames per second window (CVE-2023-44487, CVE-2019-9514)
+    optional uint32 h2_max_rst_stream_per_window = 13;
+    // Maximum PING frames per second window (CVE-2019-9512)
+    optional uint32 h2_max_ping_per_window = 14;
+    // Maximum SETTINGS frames per second window (CVE-2019-9515)
+    optional uint32 h2_max_settings_per_window = 15;
+    // Maximum empty DATA frames per second window (CVE-2019-9518)
+    optional uint32 h2_max_empty_data_per_window = 16;
+    // Maximum CONTINUATION frames per header block (CVE-2024-27316)
+    optional uint32 h2_max_continuation_frames = 17;
+    // Maximum accumulated protocol anomalies before ENHANCE_YOUR_CALM
+    optional uint32 h2_max_glitch_count = 18;
+    // H2 connection tuning parameters.
+    // Connection-level receive window size in bytes (RFC 9113 §6.9.2).
+    // Default: 1048576 (1MB). The RFC default of 65535 is too small for proxying.
+    optional uint32 h2_initial_connection_window = 19;
+    // Maximum concurrent H2 streams the proxy accepts (SETTINGS_MAX_CONCURRENT_STREAMS).
+    // Default: 100.
+    optional uint32 h2_max_concurrent_streams = 20;
+    // Shrink threshold ratio for recycled stream slots. Vec is shrunk when
+    // total_slots > active_streams * ratio. Default: 2.
+    optional uint32 h2_stream_shrink_ratio = 21;
+    // Absolute lifetime cap on RST_STREAM frames received on a single H2
+    // connection (CVE-2023-44487). Default: 10000.
+    optional uint64 h2_max_rst_stream_lifetime = 22;
+    // Lifetime cap on "abusive" (pre-response-start) RST_STREAM frames
+    // received on a single H2 connection — the Rapid Reset signature.
+    // Default: 50.
+    optional uint64 h2_max_rst_stream_abusive_lifetime = 23;
+    // Absolute lifetime cap on RST_STREAM frames **emitted by the server**
+    // on a single H2 connection (CVE-2025-8671 "MadeYouReset"). Covers the
+    // emission-direction-flipped sibling of Rapid Reset, where an attacker
+    // sends legitimate-looking frames (Content-Length mismatch, header parse
+    // error, rejected priority, zero-increment WINDOW_UPDATE on an open
+    // stream) that coerce the server into emitting RST_STREAM. Graceful
+    // `NoError` cancels are exempt. Default: 500.
+    optional uint64 h2_max_rst_stream_emitted_lifetime = 27;
+    // Maximum accumulated HPACK-decoded header list size per request
+    // (SETTINGS_MAX_HEADER_LIST_SIZE, RFC 9113 §6.5.2). Default: 65536.
+    optional uint32 h2_max_header_list_size = 24;
+    // Per-stream idle timeout, in seconds. An open H2 stream that receives
+    // no meaningful application data (non-empty DATA or HEADERS frames) for
+    // this duration is cancelled (RST_STREAM / CANCEL). Active uploads that
+    // trickle DATA frames reset the timer on each non-empty frame. Defends
+    // against slow-multiplex Slowloris where a client keeps connection-level
+    // activity high (any frame resets the connection idle timer) while pinning
+    // up to `h2_max_concurrent_streams` streams. Default: 30.
+    optional uint32 h2_stream_idle_timeout_seconds = 25;
+    // Maximum HPACK dynamic table size (SETTINGS_HEADER_TABLE_SIZE) accepted
+    // from the peer. Caps the peer-advertised value to prevent unbounded
+    // HPACK encoder memory growth. Default: 65536.
+    optional uint32 h2_max_header_table_size = 26;
+    // Maximum wall-clock seconds to wait for in-flight H2 streams after
+    // GOAWAY(NO_ERROR) before forcibly closing the connection. Default: 5.
+    // Set to 0 to require streams to finish (no forced close).
+    optional uint32 h2_graceful_shutdown_deadline_seconds = 28;
+    // Maximum connection-level (stream 0) WINDOW_UPDATE frames per second
+    // window. Caps non-zero stream-0 WINDOW_UPDATE floods that would otherwise
+    // stay under the generic glitch counter (zero-increment stream-0 updates
+    // already trigger GOAWAY per RFC 9113 §6.9). Default: 100.
+    optional uint32 h2_max_window_update_stream0_per_window = 29;
+    // Name of the correlation header Sozu injects into every request and
+    // response to carry the per-request ULID. Default: "Sozu-Id". Operators
+    // who want to rebrand can set e.g. "X-Edge-Id" or "X-Request-Trace".
+    optional string sozu_id_header = 30;
+    // Per-status HTTP answer template bodies, keyed by HTTP status code
+    // (e.g. "404", "503"). Replaces the per-field shape of `CustomHttpAnswers`
+    // (field 12). The new field is populated alongside `http_answers` so
+    // legacy state files round-trip; new code should read this map.
+    map<string, string> answers = 31;
+    // When true, any client-supplied `X-Real-IP` header is stripped from
+    // requests before forwarding (anti-spoofing). Independently combinable
+    // with `send_x_real_ip`. Default: false.
+    optional bool elide_x_real_ip = 32 [default = false];
+    // When true, a proxy-generated `X-Real-IP` header carrying the connection
+    // peer IP (post-PROXY-v2 unwrap, i.e. the original client IP) is appended
+    // to every forwarded request. Independently combinable with
+    // `elide_x_real_ip`. Default: false.
+    optional bool send_x_real_ip = 33 [default = false];
+}
+
+// details of an HTTPS listener
+message HttpsListenerConfig {
+    required SocketAddress address = 1;
+    optional SocketAddress public_address = 2;
+    required bool expect_proxy = 5 [default = false];
+    required string sticky_name = 6;
+    // client inactive time, in seconds
+    required uint32 front_timeout = 7 [default = 60];
+    // backend server inactive time, in seconds
+    required uint32 back_timeout = 8 [default = 30];
+    // time to connect to the backend, in seconds
+    required uint32 connect_timeout = 9 [default = 3];
+    // max time to send a complete request, in seconds
+    required uint32 request_timeout = 10 [default = 10];
+    // wether the listener is actively listening on its socket
+    required bool active = 11 [default = false];
+    // TLS versions
+    repeated TlsVersion versions = 12;
+    repeated string cipher_list = 13;
+    repeated string cipher_suites = 14;
+    repeated string signature_algorithms = 15;
+    repeated string groups_list = 16;
+    optional string certificate = 17;
+    repeated string certificate_chain = 18;
+    optional string key = 19;
+    // Number of TLS 1.3 tickets to send to a client when establishing a connection.
+    // The tickets allow the client to resume a session. This protects the client
+    // agains session tracking. Defaults to 4.
+    required uint64 send_tls13_tickets = 20;
+    // DEPRECATED: per-status answer message. Prefer the `answers` map at
+    // field 43. Kept on the wire so legacy state files round-trip cleanly;
+    // workers populate both fields and treat them as equivalent on read.
+    optional CustomHttpAnswers http_answers = 21;
+    // ALPN protocols to advertise during TLS handshake, in order of preference.
+    // Valid values: "h2", "http/1.1". Defaults to ["h2", "http/1.1"].
+    repeated string alpn_protocols = 22;
+    // H2 flood detection thresholds (CVE mitigations).
+    // All are optional; when absent, built-in defaults are used.
+    // Maximum RST_STREAM frames per second window (CVE-2023-44487, CVE-2019-9514)
+    optional uint32 h2_max_rst_stream_per_window = 23;
+    // Maximum PING frames per second window (CVE-2019-9512)
+    optional uint32 h2_max_ping_per_window = 24;
+    // Maximum SETTINGS frames per second window (CVE-2019-9515)
+    optional uint32 h2_max_settings_per_window = 25;
+    // Maximum empty DATA frames per second window (CVE-2019-9518)
+    optional uint32 h2_max_empty_data_per_window = 26;
+    // Maximum CONTINUATION frames per header block (CVE-2024-27316)
+    optional uint32 h2_max_continuation_frames = 27;
+    // Maximum accumulated protocol anomalies before ENHANCE_YOUR_CALM
+    optional uint32 h2_max_glitch_count = 28;
+    // H2 connection tuning parameters.
+    // Connection-level receive window size in bytes (RFC 9113 §6.9.2).
+    // Default: 1048576 (1MB). The RFC default of 65535 is too small for proxying.
+    optional uint32 h2_initial_connection_window = 29;
+    // Maximum concurrent H2 streams the proxy accepts (SETTINGS_MAX_CONCURRENT_STREAMS).
+    // Default: 100.
+    optional uint32 h2_max_concurrent_streams = 30;
+    // Shrink threshold ratio for recycled stream slots. Vec is shrunk when
+    // total_slots > active_streams * ratio. Default: 2.
+    optional uint32 h2_stream_shrink_ratio = 31;
+    // Absolute lifetime cap on RST_STREAM frames received on a single H2
+    // connection (CVE-2023-44487). Default: 10000.
+    optional uint64 h2_max_rst_stream_lifetime = 32;
+    // Lifetime cap on "abusive" (pre-response-start) RST_STREAM frames
+    // received on a single H2 connection — the Rapid Reset signature.
+    // Default: 50.
+    optional uint64 h2_max_rst_stream_abusive_lifetime = 33;
+    // Absolute lifetime cap on RST_STREAM frames **emitted by the server**
+    // on a single H2 connection (CVE-2025-8671 "MadeYouReset"). Covers the
+    // emission-direction-flipped sibling of Rapid Reset, where an attacker
+    // sends legitimate-looking frames (Content-Length mismatch, header parse
+    // error, rejected priority, zero-increment WINDOW_UPDATE on an open
+    // stream) that coerce the server into emitting RST_STREAM. Graceful
+    // `NoError` cancels are exempt. Default: 500.
+    optional uint64 h2_max_rst_stream_emitted_lifetime = 39;
+    // Maximum accumulated HPACK-decoded header list size per request
+    // (SETTINGS_MAX_HEADER_LIST_SIZE, RFC 9113 §6.5.2). Default: 65536.
+    optional uint32 h2_max_header_list_size = 34;
+    // When true, every HTTP request served on this listener must have its
+    // `:authority` / `Host` host exact-match the TLS SNI that was negotiated
+    // at handshake (CWE-346 / CWE-444). Disabling this lifts the per-stream
+    // TLS trust boundary, so leave enabled unless an operational need
+    // requires cross-SNI routing. Default: true.
+    optional bool strict_sni_binding = 35;
+    // When true, this listener only accepts HTTP/2 connections: clients
+    // that fail to negotiate `h2` via TLS ALPN (including those that
+    // omit ALPN altogether) are dropped at handshake instead of silently
+    // falling back to HTTP/1.1. Default: false — preserves the historical
+    // "ALPN missing defaults to h1" behavior.
+    optional bool disable_http11 = 36;
+    // Per-stream idle timeout, in seconds. An open H2 stream that receives
+    // no meaningful application data (non-empty DATA or HEADERS frames) for
+    // this duration is cancelled (RST_STREAM / CANCEL). Active uploads that
+    // trickle DATA frames reset the timer on each non-empty frame. Defends
+    // against slow-multiplex Slowloris where a client keeps connection-level
+    // activity high (any frame resets the connection idle timer) while pinning
+    // up to `h2_max_concurrent_streams` streams. Default: 30.
+    optional uint32 h2_stream_idle_timeout_seconds = 37;
+    // Maximum HPACK dynamic table size (SETTINGS_HEADER_TABLE_SIZE) accepted
+    // from the peer. Caps the peer-advertised value to prevent unbounded
+    // HPACK encoder memory growth. Default: 65536.
+    optional uint32 h2_max_header_table_size = 38;
+    // Maximum wall-clock seconds to wait for in-flight H2 streams after
+    // GOAWAY(NO_ERROR) before forcibly closing the connection. Default: 5.
+    // Set to 0 to require streams to finish (no forced close).
+    optional uint32 h2_graceful_shutdown_deadline_seconds = 40;
+    // Maximum connection-level (stream 0) WINDOW_UPDATE frames per second
+    // window. Caps non-zero stream-0 WINDOW_UPDATE floods that would otherwise
+    // stay under the generic glitch counter (zero-increment stream-0 updates
+    // already trigger GOAWAY per RFC 9113 §6.9). Default: 100.
+    optional uint32 h2_max_window_update_stream0_per_window = 41;
+    // Name of the correlation header Sozu injects into every request and
+    // response to carry the per-request ULID. Default: "Sozu-Id". Operators
+    // who want to rebrand can set e.g. "X-Edge-Id" or "X-Request-Trace".
+    optional string sozu_id_header = 42;
+    // Per-status HTTP answer template bodies, keyed by HTTP status code
+    // (e.g. "404", "503"). Replaces the per-field shape of `CustomHttpAnswers`
+    // (field 21). The new field is populated alongside `http_answers` so
+    // legacy state files round-trip; new code should read this map.
+    map<string, string> answers = 43;
+    // When true, any client-supplied `X-Real-IP` header is stripped from
+    // requests before forwarding (anti-spoofing). Independently combinable
+    // with `send_x_real_ip`. Default: false.
+    optional bool elide_x_real_ip = 44 [default = false];
+    // When true, a proxy-generated `X-Real-IP` header carrying the connection
+    // peer IP (post-PROXY-v2 unwrap, i.e. the original client IP) is appended
+    // to every forwarded request. Independently combinable with
+    // `elide_x_real_ip`. Default: false.
+    optional bool send_x_real_ip = 45 [default = false];
+    // Listener-default HSTS (HTTP Strict Transport Security, RFC 6797)
+    // policy. When set, every successful response on this listener gains
+    // a `Strict-Transport-Security` header derived from the materialised
+    // policy (RFC 6797 §6.1 single-header requirement, §7.2 HTTPS-only
+    // emission, §8.1 host scope, §11.4 max-age=0 kill-switch). A
+    // per-frontend `RequestHttpFrontend.hsts` overrides this default.
+    optional HstsConfig hsts = 46;
+}
+
+// details of an TCP listener
+message TcpListenerConfig {
+    required SocketAddress address = 1;
+    optional SocketAddress public_address = 2;
+    required bool expect_proxy = 3 [default = false];
+    // client inactive time, in seconds
+    required uint32 front_timeout = 4 [default = 60];
+    // backend server inactive time, in seconds
+    required uint32 back_timeout = 5 [default = 30];
+    // time to connect to the backend, in seconds
+    required uint32 connect_timeout = 6 [default = 3];
+    // wether the listener is actively listening on its socket
+    required bool active = 7 [default = false];
+}
+
+// HSTS (HTTP Strict Transport Security, RFC 6797) policy attached to
+// an HTTPS listener default or per-frontend. The materialised
+// `Strict-Transport-Security: max-age=N[; includeSubDomains][; preload]`
+// header is injected on every successful HTTPS response (including
+// proxy-generated 3xx/401/5xx default answers). Per RFC 6797 §7.2 the
+// header MUST NOT be emitted on plaintext-HTTP responses; sozu rejects
+// HSTS configured on an HttpListenerConfig at config-load time and gates
+// the runtime injection on `context.protocol == Protocol::HTTPS`.
+//
+// Validation:
+// - `enabled = true` with `max_age = None` defaults `max_age` to
+//  31536000 seconds (1 year) at config-load.
+// - `max_age = 0` is the RFC 6797 §11.4 kill-switch and is allowed
+//  silently; `0 < max_age < 86400` warns.
+// - `preload = true` with `max_age < 31536000` or
+//  `include_subdomains != true` warns (Chrome HSTS preload list
+//  prerequisites at https://hstspreload.org/).
+// - `preload` is opt-in only; never default-true (RFC 6797 §14.2 —
+//  removal from the preload list is slow and partial).
+message HstsConfig {
+    // Whether HSTS is enabled for this scope. Required whenever the
+    // parent message includes an HstsConfig — the partial-update path
+    // treats `enabled = false` as the explicit-disable signal.
+    optional bool enabled = 1;
+    // Strict-Transport-Security `max-age` directive in seconds. When
+    // `enabled = true` and this is unset, sozu substitutes 31536000
+    // (1 year, HSTS preload list minimum) at config-load.
+    optional uint32 max_age = 2;
+    // Append `; includeSubDomains` to the rendered header.
+    optional bool include_subdomains = 3;
+    // Append `; preload` to the rendered header. Opt-in only — see
+    // RFC 6797 §14.2 and https://hstspreload.org/.
+    optional bool preload = 4;
+    // Operator opt-in to override any backend-supplied
+    // `Strict-Transport-Security` header with sozu's typed policy.
+    //
+    // RFC 6797 §6.1 default behaviour is to PRESERVE a backend-emitted
+    // STS header when one is already present (sozu's HSTS edit uses
+    // `HeaderEditMode::SetIfAbsent`). That keeps the backend's intent
+    // intact for upstreams that ship their own HSTS policy.
+    //
+    // Set this to `true` for the harden-centrally case: backends behind
+    // sozu emit a stale or weak HSTS policy (e.g. legacy `max-age=300`)
+    // and the operator wants to enforce a stronger policy at the proxy
+    // edge unconditionally. The materialiser then uses
+    // `HeaderEditMode::Set` instead of `SetIfAbsent`, replacing every
+    // backend-supplied STS header with sozu's rendered value.
+    //
+    // Cite: https://datatracker.ietf.org/doc/html/rfc6797#section-6.1
+    optional bool force_replace_backend = 5;
+}
+
+// custom HTTP answers, useful for 404, 503 pages
+message CustomHttpAnswers {
+    // MovedPermanently
+    optional string answer_301 = 1;
+    // BadRequest
+    optional string answer_400 = 2;
+    // Unauthorized
+    optional string answer_401 = 3;
+    // NotFound
+    optional string answer_404 = 4;
+    // RequestTimeout
+    optional string answer_408 = 5;
+    // PayloadTooLarge
+    optional string answer_413 = 6;
+    // MisdirectedRequest (RFC 9110 §15.5.20, TLS SNI ↔ :authority mismatch)
+    optional string answer_421 = 11;
+    // BadGateway
+    optional string answer_502 = 7;
+    // ServiceUnavailable
+    optional string answer_503 = 8;
+    // GatewayTimeout
+    optional string answer_504 = 9;
+    // InsufficientStorage
+    optional string answer_507 = 10;
+    // TooManyRequests (per-(cluster, source-IP) connection limit hit)
+    optional string answer_429 = 12;
+}
+
+message ActivateListener {
+    required SocketAddress address = 1;
+    required ListenerType proxy = 2;
+    required bool from_scm = 3;
+}
+
+message DeactivateListener {
+    required SocketAddress address = 1;
+    required ListenerType proxy = 2;
+    required bool to_scm = 3;
+}
+
+message RemoveListener {
+    required SocketAddress address = 1;
+    required ListenerType proxy = 2;
+}
+
+enum ListenerType {
+    HTTP = 0;
+    HTTPS = 1;
+    TCP = 2;
+}
+
+// All listeners, listed
+message ListenersList {
+    // address -> http listener config
+    map<string, HttpListenerConfig> http_listeners = 1;
+    // address -> https listener config
+    map<string, HttpsListenerConfig> https_listeners = 2;
+    // address -> tcp listener config
+    map<string, TcpListenerConfig> tcp_listeners = 3;
+}
+
+// Frontend-level redirect policy. Mirrors HAProxy's
+// `http-request redirect|deny|auth` directives.
+// FORWARD routes to the backend (default).
+// PERMANENT returns 301 with a `Location` header derived from
+// `redirect_scheme`, optional `rewrite_*` fields, and `cluster.https_redirect_port`.
+// FOUND returns 302 — a temporary redirect (RFC 9110 §15.4.3); user agents may
+// rewrite POST to GET on follow.
+// PERMANENT_REDIRECT returns 308 — a permanent redirect (RFC 9110 §15.4.9); the
+// HTTP method MUST be preserved on follow (no GET-rewrite on POST).
+// UNAUTHORIZED returns 401 with `WWW-Authenticate: Basic realm=...`
+// using `cluster.www_authenticate`; suitable for blanket deny-by-default
+// routes that still want to surface a login prompt.
+enum RedirectPolicy {
+    FORWARD = 0;
+    PERMANENT = 1;
+    UNAUTHORIZED = 2;
+    FOUND = 3;
+    PERMANENT_REDIRECT = 4;
+}
+
+// Scheme to use when building the `Location` header for a permanent redirect.
+// USE_SAME preserves the request scheme (default), USE_HTTP forces `http://`,
+// USE_HTTPS forces `https://`.
+enum RedirectScheme {
+    USE_SAME = 0;
+    USE_HTTP = 1;
+    USE_HTTPS = 2;
+}
+
+// Where a `Header` mutation applies. `BOTH` applies the same edit on the
+// request side (before backend connect) and the response side (before kawa
+// preparation). Mirrors HAProxy `http-request set-header` /
+// `http-response set-header` parity.
+enum HeaderPosition {
+    // Reserve 0 for the proto-default-encoded shape so a `Header` written
+    // by `..Default::default()` (or by an older client) deserialises into
+    // an explicit "unset" rather than failing `HeaderPosition::try_from(0)`.
+    // The runtime treats this as a hard config error and rejects the
+    // header rather than guessing a position.
+    HEADER_POSITION_UNSPECIFIED = 0;
+    REQUEST = 1;
+    RESPONSE = 2;
+    BOTH = 3;
+}
+
+// A single header mutation applied to a request, response, or both.
+//
+// An empty `val` deletes the header by name (HAProxy `del-header` parity).
+// A non-empty `val` performs a set/replace; a header with the same name is
+// overwritten. Header names are matched case-insensitively per RFC 9110 §5.1.
+message Header {
+    required HeaderPosition position = 1;
+    required string key = 2;
+    // Empty `val` deletes the header by name (HAProxy `del-header` parity).
+    required string val = 3;
+}
+
+// An HTTP or HTTPS frontend, as order to, or received from, Sōzu
+message RequestHttpFrontend {
+    optional string cluster_id = 1;
+    required SocketAddress address = 2;
+    required string hostname = 3;
+    required PathRule path = 4;
+    optional string method = 5;
+    required RulePosition position = 6 [default = TREE];
+    // custom tags to identify the frontend in the access logs
+    map<string, string> tags = 7;
+    // Redirect policy for this frontend. Default `FORWARD` (no redirect).
+    optional RedirectPolicy redirect = 8 [default = FORWARD];
+    // When true, requests routed through this frontend must carry a valid
+    // `Authorization: Basic <user:pass>` header whose hash matches one of
+    // `cluster.authorized_hashes`. Default: false.
+    optional bool required_auth = 9;
+    // Scheme to use when emitting a 301 `Location` header. Default `USE_SAME`
+    // (preserve the request scheme).
+    optional RedirectScheme redirect_scheme = 10 [default = USE_SAME];
+    // Optional template applied when emitting a permanent redirect. Supports
+    // `%REDIRECT_LOCATION` and the variables documented in `doc/configure.md`.
+    optional string redirect_template = 11;
+    // Rewrite host template. Supports `$HOST[n]` / `$PATH[n]` placeholders
+    // populated from regex captures collected during routing. When set, both
+    // the backend authority/path and the wire request line are rewritten.
+    optional string rewrite_host = 12;
+    // Rewrite path template. Same grammar as `rewrite_host`.
+    optional string rewrite_path = 13;
+    // Optional literal port override on the rewritten URL.
+    optional uint32 rewrite_port = 14;
+    // Header mutations applied to requests and/or responses passing through
+    // this frontend. See `Header` for delete semantics.
+    repeated Header headers = 15;
+    // Per-frontend HSTS (RFC 6797) override. When `Some`, this entire
+    // policy replaces the listener-default `HttpsListenerConfig.hsts`
+    // for matched requests; when absent, the listener default applies.
+    // Honours RFC 6797 §6.1 (single Strict-Transport-Security header on
+    // the response) and §8.1 (HSTS host scope tied to the receiving
+    // host). On HTTP-only frontends the value is rejected at config-load
+    // (RFC 6797 §7.2). The §11.4 `max-age=0` kill-switch is honoured
+    // verbatim so an operator can shadow a listener-wide HSTS for one
+    // hostname.
+    optional HstsConfig hsts = 16;
+}
+
+message RequestTcpFrontend {
+    required string cluster_id = 1;
+    // the socket address on which to listen for incoming traffic
+    required SocketAddress address = 2;
+    // custom tags to identify the frontend in the access logs
+    map<string, string> tags = 3;
+}
+
+// list the frontends, filtered by protocol and/or domain
+message FrontendFilters {
+    required bool http = 1;
+    required bool https = 2;
+    required bool tcp = 3;
+    optional string domain = 4;
+}
+
+// A filter for the path of incoming requests
+message PathRule {
+    // The kind of filter used for path rules
+    required PathRuleKind kind = 1;
+    // the value of the given prefix, regex or equal pathrule
+    required string value = 2;
+}
+
+// The kind of filter used for path rules
+enum PathRuleKind {
+    // filters paths that start with a pattern, typically "/api"
+    PREFIX = 0;
+    // filters paths that match a regex pattern
+    REGEX = 1;
+    // filters paths that exactly match a pattern, no more, no less
+    EQUALS = 2;
+}
+
+// TODO: find a proper definition for this
+enum RulePosition {
+    PRE = 0;
+    POST = 1;
+    TREE = 2;
+}
+
+// Add a new TLS certificate to an HTTPs listener
+message AddCertificate {
+    required SocketAddress address = 1;
+    required CertificateAndKey certificate = 2;
+    // A unix timestamp. Overrides certificate expiration.
+    optional int64 expired_at = 3;
+}
+
+message RemoveCertificate {
+    required SocketAddress address = 1;
+    // a hex-encoded TLS fingerprint to identify the certificate to remove
+    required string fingerprint = 2;
+}
+
+message ReplaceCertificate {
+    required SocketAddress address = 1;
+    required CertificateAndKey new_certificate = 2;
+    // a hex-encoded TLS fingerprint to identify the old certificate
+    required string old_fingerprint = 3;
+    // A unix timestamp. Overrides certificate expiration.
+    optional int64 new_expired_at = 4;
+}
+
+message CertificateAndKey {
+    required string certificate = 1;
+    repeated string certificate_chain = 2;
+    required string key = 3;
+    repeated TlsVersion versions = 4;
+    // a list of domain names. Override certificate names
+    // if empty, the names of the certificate will be used
+    repeated string names = 5;
+}
+
+// Should be either a domain name or a fingerprint.
+// These filter do not compound, use either one but not both.
+// If none of them is specified, all certificates will be returned.
+message QueryCertificatesFilters {
+    // a domain name to filter certificate results
+    optional string domain = 1;
+    // a hex-encoded fingerprint of the TLS certificate to find
+    optional string fingerprint = 2;
+}
+
+// domain name and fingerprint of a certificate
+message CertificateSummary {
+    required string domain = 1;
+    // a hex-encoded TLS fingerprint
+    required string fingerprint = 2;
+}
+
+// Used by workers to reply to some certificate queries
+message ListOfCertificatesByAddress {
+    repeated CertificatesByAddress certificates = 1;
+}
+
+// Summaries of certificates for a given address
+message CertificatesByAddress {
+    required SocketAddress address = 1;
+    repeated CertificateSummary certificate_summaries = 2;
+}
+
+// to reply to several certificate queries
+message CertificatesWithFingerprints {
+    // a map of fingerprint -> certificate_and_key
+    map<string, CertificateAndKey> certs = 1;
+}
+
+enum TlsVersion {
+    SSL_V2 = 0;
+    SSL_V3 = 1;
+    TLS_V1_0 = 2;
+    TLS_V1_1 = 3;
+    TLS_V1_2 = 4;
+    TLS_V1_3 = 5;
+}
+
+// A cluster is what binds a frontend to backends with routing rules
+message Cluster {
+    required string cluster_id = 1;
+    // wether a connection from a client shall be always redirected to the same backend
+    required bool sticky_session = 2;
+    required bool https_redirect = 3;
+    optional ProxyProtocolConfig proxy_protocol = 4;
+    required LoadBalancingAlgorithms load_balancing = 5 [default = ROUND_ROBIN];
+    optional string answer_503 = 6;
+    optional LoadMetric load_metric = 7;
+    // Backend-capability hint: set to true when THE BACKEND speaks HTTP/2 (h2c or h2+TLS).
+    // This does NOT gate H2 acceptance at the frontend — frontend H2 is negotiated via
+    // TLS ALPN independently of per-cluster configuration (see alpn_protocols on the listener).
+    optional bool http2 = 8;
+    // Per-cluster HTTP answer template overrides keyed by HTTP status code
+    // (e.g. "503"). Override a listener-level answer for this cluster only.
+    map<string, string> answers = 9;
+    // Optional explicit port to use when building the `Location` header for
+    // an `https_redirect`. When unset, the listener's effective HTTPS port is
+    // used. Lets operators front a non-standard HTTPS port (e.g. 8443) on
+    // the redirect target while keeping `https_redirect = true`.
+    optional uint32 https_redirect_port = 10;
+    // Authorized credentials for HTTP basic authentication. Each entry is
+    // formatted as `username:hex(sha256(password))` (lower-case hex). The
+    // mux compares the supplied `Authorization: Basic` header in
+    // constant-time against the full list. Empty list disables auth even
+    // when a frontend sets `required_auth = true` — those requests are
+    // rejected with a 401.
+    repeated string authorized_hashes = 11;
+    // Realm string emitted in `WWW-Authenticate: Basic realm="…"` when an
+    // unauthenticated request is rejected. Treated as an opaque value (no
+    // template substitution). Defaults to a generic realm if unset.
+    optional string www_authenticate = 12;
+    // Per-cluster override for the global `max_connections_per_ip`.
+    // `None` (field absent) inherits the global default. `Some(0)` is
+    // explicit "unlimited for this cluster". `Some(n > 0)` overrides with
+    // the cluster-specific limit. Counts are kept per
+    // `(cluster_id, source_ip)` pair, so two clusters never share a
+    // counter even from the same IP.
+    optional uint64 max_connections_per_ip = 13;
+    // Per-cluster override for the global `retry_after` header value
+    // (seconds, HTTP 429 only). `None` inherits the global default.
+    // `Some(0)` omits the header.
+    optional uint32 retry_after = 14;
+    // Optional HTTP health check configuration for backends in this cluster.
+    // Tag 8 in this message is the `http2` backend-capability hint and
+    // tags 9-14 cover answers/redirect/auth/limits, so health-check
+    // configuration occupies tag 15.
+    optional HealthCheckConfig health_check = 15;
+}
+
+message HealthCheckConfig {
+    required string uri = 1;
+    required uint32 interval = 2 [default = 10];
+    required uint32 timeout = 3 [default = 5];
+    required uint32 healthy_threshold = 4 [default = 3];
+    required uint32 unhealthy_threshold = 5 [default = 3];
+    required uint32 expected_status = 6 [default = 0];
+    // The probe wire format is derived from `Cluster.http2` (the same
+    // backend-capability hint the mux router reads). When the cluster
+    // sets `http2 = true`, the probe sends the HTTP/2 connection
+    // preface + empty SETTINGS + HEADERS frame on stream 1; otherwise
+    // HTTP/1.1. There is no per-`HealthCheckConfig` h2c flag — the
+    // probe wire follows the data-plane wire so an h2c-only backend
+    // is never probed with HTTP/1.1 (and vice versa).
+}
+
+enum LoadBalancingAlgorithms {
+    ROUND_ROBIN = 0;
+    RANDOM = 1;
+    LEAST_LOADED = 2;
+    POWER_OF_TWO = 3;
+}
+
+enum ProxyProtocolConfig {
+    EXPECT_HEADER = 0;
+    SEND_HEADER = 1;
+    RELAY_HEADER = 2;
+}
+
+// how sozu measures which backend is less loaded
+enum LoadMetric {
+    // number of TCP connections
+    CONNECTIONS = 0;
+    // number of active HTTP requests
+    REQUESTS = 1;
+    // time to connect to the backend, weighted by the number of active connections (peak EWMA)
+    CONNECTION_TIME = 2;
+}
+
+// add a backend
+message AddBackend {
+    required string cluster_id = 1;
+    required string backend_id = 2;
+    // the socket address of the backend
+    required SocketAddress address = 3;
+    optional string sticky_id = 4;
+    optional LoadBalancingParams load_balancing_parameters = 5;
+    optional bool backup = 6;
+}
+
+// remove an existing backend
+message RemoveBackend {
+    required string cluster_id = 1;
+    required string backend_id = 2;
+    // the socket address of the backend
+    required SocketAddress address = 3 ;
+}
+
+message LoadBalancingParams {
+    required int32 weight = 1;
+}
+
+message QueryClusterByDomain {
+    required string hostname = 1;
+    optional string path = 2;
+}
+
+// Options when querying metrics
+message QueryMetricsOptions {
+    // query a list of available metrics
+    required bool list = 1;
+    // query metrics for these clusters
+    repeated string cluster_ids = 2;
+    // query metrics for these backends
+    repeated string backend_ids = 3;
+    // query only these metrics
+    repeated string metric_names = 4;
+    // query only worker and main process metrics (no cluster metrics)
+    required bool no_clusters = 5;
+    // display metrics of each worker, without flattening (takes more space)
+    required bool workers = 6;
+}
+
+// options to configure metrics collection
+enum MetricsConfiguration {
+    // enable metrics collection
+    ENABLED = 0;
+    // disable metrics collection
+    DISABLED = 1;
+    // wipe the metrics memory
+    CLEAR = 2;
+}
+
+// Response to a request
+message Response {
+    // wether the request was a success, a failure, or is processing
+    required ResponseStatus status = 1 [default = FAILURE];
+    // a success or error message
+    required string message = 2;
+    // response data, if any
+    optional ResponseContent content = 3;
+}
+
+
+// content of a response
+message ResponseContent {
+    oneof content_type {
+        // a list of workers, with ids, pids, statuses
+        WorkerInfos workers = 1;
+        // aggregated metrics of main process and workers
+        AggregatedMetrics metrics = 2;
+        // a collection of worker responses to the same request
+        WorkerResponses worker_responses = 3;
+        // a proxy event
+        Event event = 4;
+        // a filtered list of frontend
+        ListedFrontends frontend_list = 5;
+        // all listeners
+        ListenersList listeners_list = 6;
+        // contains proxy & cluster metrics
+        WorkerMetrics worker_metrics = 7;
+        // Lists of metrics that are available
+        AvailableMetrics available_metrics = 8;
+        // a list of cluster informations
+        ClusterInformations clusters = 9;
+        // collection of hashes of cluster information, 
+        ClusterHashes cluster_hashes = 10;
+        // a list of certificates summaries, grouped by socket address
+        ListOfCertificatesByAddress certificates_by_address = 11;
+        // a map of complete certificates using fingerprints as key
+        CertificatesWithFingerprints certificates_with_fingerprints = 12;
+        // a census of the types of requests received since startup,
+        RequestCounts request_counts = 13;
+        // current global per-(cluster, source-IP) connection limit
+        MaxConnectionsPerIpLimit max_connections_per_ip_limit = 14;
+        // health check configurations by cluster (renumbered from PR #1191's
+        // original `14` since post-1209 occupies that tag).
+        HealthChecksList health_checks_list = 15;
+    }
+}
+
+message HealthChecksList {
+    map<string, HealthCheckConfig> map = 1;
+}
+
+// a map of worker_id -> ResponseContent
+message WorkerResponses {
+    map<string, ResponseContent> map = 1;
+}
+
+// lists of frontends present in the state
+message ListedFrontends {
+    repeated RequestHttpFrontend http_frontends = 1;
+    repeated RequestHttpFrontend https_frontends = 2;
+    repeated RequestTcpFrontend tcp_frontends = 3;
+}
+
+message ClusterInformations {
+    repeated ClusterInformation vec = 1;
+}
+
+// Information about a given cluster
+// Contains types usually used in requests, because they are readily available in protobuf
+message ClusterInformation {
+    optional Cluster configuration = 1;
+    repeated RequestHttpFrontend http_frontends = 2;
+    repeated RequestHttpFrontend https_frontends = 3;
+    repeated RequestTcpFrontend tcp_frontends = 4;
+    repeated AddBackend backends = 5;
+}
+
+// an event produced by a worker to notify about backends status
+message Event {
+    required EventKind kind = 1;
+    optional string cluster_id = 2;
+    optional string backend_id = 3;
+    optional SocketAddress address = 4;
+}
+
+enum EventKind {
+    BACKEND_DOWN = 0;
+    BACKEND_UP = 1;
+    NO_AVAILABLE_BACKENDS = 2;
+    REMOVED_BACKEND_HAS_NO_CONNECTIONS = 3;
+    // Control-plane mutation events (audit trail).
+    // Emitted by the main process to clients subscribed via SubscribeEvents.
+    // The Event.cluster_id / backend_id / address fields are populated when
+    // they are meaningful for the verb (e.g. address for listener verbs,
+    // cluster_id for cluster/frontend verbs). Backend events keep their
+    // historical numeric tags 0..3.
+    CLUSTER_ADDED = 4;
+    CLUSTER_REMOVED = 5;
+    FRONTEND_ADDED = 6;
+    FRONTEND_REMOVED = 7;
+    CERTIFICATE_ADDED = 8;
+    CERTIFICATE_REMOVED = 9;
+    CERTIFICATE_REPLACED = 10;
+    LISTENER_ACTIVATED = 11;
+    LISTENER_DEACTIVATED = 12;
+    CONFIGURATION_RELOADED = 13;
+    WORKER_KILLED = 14;
+    WORKER_RELAUNCHED = 15;
+    LOGGING_LEVEL_CHANGED = 16;
+    METRICS_CONFIGURED = 17;
+    // A listener's configuration was patched in place via UpdateHttp/Https/TcpListenerConfig
+    LISTENER_UPDATED = 18;
+    // A saved state file was loaded (batch state replay via LoadState request).
+    // Emitted once at task completion; `target=file:<path>` and `result=ok|err`
+    // with the ok/err request counts encoded in `target`.
+    STATE_LOADED = 19;
+    // A snapshot of the current state was written to disk via SaveState.
+    STATE_SAVED = 20;
+    // A new listener was added to the config (AddHttp/Https/TcpListener).
+    // Distinct from LISTENER_ACTIVATED (binds the socket) — ADDED just
+    // creates the listener's in-memory definition.
+    LISTENER_ADDED = 21;
+    // A listener's in-memory definition was removed (RemoveListener).
+    // Distinct from LISTENER_DEACTIVATED (unbinds the socket) — REMOVED
+    // drops the whole listener from the state.
+    LISTENER_REMOVED = 22;
+    // A stop request was accepted (SoftStop / HardStop).
+    // `target=stop:soft` or `stop:hard` — distinguishes drain-then-stop from
+    // immediate-abort on the audit trail.
+    SOZU_STOP_REQUESTED = 23;
+    // The main process started a re-exec upgrade (UpgradeMain).
+    MAIN_UPGRADED = 24;
+    // A worker was re-launched (UpgradeWorker).
+    WORKER_UPGRADED = 25;
+    // A client subscribed to the SubscribeEvents bus — privileged because
+    // subscribers observe every control-plane mutation.
+    EVENTS_SUBSCRIBED = 26;
+    // Backend health-check transitioned to healthy after consecutive successes.
+    // Tags 0..3 are the historical backend-state events; 4..26 carry the
+    // control-plane mutation events (cluster, frontend, certificate,
+    // listener, worker, configuration, metrics, state, stop, upgrade,
+    // events). Backend health-check transitions therefore start at 27.
+    HEALTH_CHECK_HEALTHY = 27;
+    // Backend health-check transitioned to unhealthy after consecutive failures.
+    HEALTH_CHECK_UNHEALTHY = 28;
+    // Cluster transitioned from "all backends down" back to "at least one
+    // backend available". Pairs with `NoAvailableBackends` (tag 2) so
+    // dashboards can plot per-cluster recovery.
+    CLUSTER_RECOVERED = 29;
+}
+
+message ClusterHashes {
+    // cluster id -> hash of cluster information
+    map<string, uint64> map = 1;
+}
+
+enum ResponseStatus {
+    OK = 0;
+    PROCESSING = 1;
+    FAILURE = 2;
+}
+
+// A list of worker infos
+message WorkerInfos {
+    repeated WorkerInfo vec = 1;
+}
+
+// Information about a worker with id, pid, runstate
+message WorkerInfo {
+    required uint32 id = 1;
+    required int32 pid = 2;
+    required RunState run_state = 3;
+}
+
+// Runstate of a worker
+enum RunState {
+    RUNNING = 0;
+    STOPPING = 1;
+    STOPPED = 2;
+    NOT_ANSWERING = 3;
+}
+
+// lists of available metrics in a worker, or in the main process (in which case there are no cluster metrics)
+message AvailableMetrics {
+    repeated string proxy_metrics = 1;
+    repeated string cluster_metrics = 2;
+}
+
+// Aggregated metrics of main process & workers
+message AggregatedMetrics {
+    // metrics about the main process.
+    // metric_name -> metric_value
+    map<string, FilteredMetrics> main = 1;
+    // details of worker metrics, with clusters and backends.
+    // worker_id -> worker_metrics
+    map<string, WorkerMetrics> workers = 2;
+    // if present, contains metrics of clusters and their backends, merged across all workers.
+    // cluster_id -> cluster_metrics
+    map<string, ClusterMetrics> clusters = 3;
+    // if present, proxying metrics, merged accross all workers.
+    // metric_name -> metric_value
+    map<string, FilteredMetrics> proxying = 4;
+}
+
+// All metrics of a worker: proxy and clusters
+// Populated by Options so partial results can be sent
+message WorkerMetrics {
+   // Metrics of the worker process, key -> value
+    map<string, FilteredMetrics> proxy = 1;
+    // cluster_id -> cluster_metrics
+    map<string, ClusterMetrics> clusters = 2;
+}
+
+// the metrics of a given cluster, with several backends
+message ClusterMetrics {
+    // metric name -> metric value
+    map<string, FilteredMetrics> cluster = 1;
+    // list of backends with their metrics
+    repeated BackendMetrics backends = 2;
+}
+
+message BackendMetrics {
+    required string backend_id = 1;
+    map<string, FilteredMetrics> metrics = 2;
+}
+
+// A metric, in a "filtered" format, which means: sendable to outside programs.
+message FilteredMetrics {
+    oneof inner {
+        // increases or decrease depending on the state
+        uint64 gauge = 1;
+        // increases only
+        int64 count = 2;
+        // milliseconds
+        uint64 time = 3;
+        Percentiles percentiles = 4;
+        FilteredTimeSerie time_serie = 5;
+        FilteredHistogram histogram = 6;
+    }
+}
+
+message FilteredTimeSerie {
+    required uint32 last_second = 1;
+    repeated uint32 last_minute = 2;
+    repeated uint32 last_hour = 3;
+}
+
+message Percentiles {
+    required uint64 samples = 1;
+    required uint64 p_50 = 2;
+    required uint64 p_90 = 3;
+    required uint64 p_99 = 4;
+    required uint64 p_99_9 = 5;
+    required uint64 p_99_99 = 6;
+    required uint64 p_99_999 = 7;
+    required uint64 p_100 = 8;
+    required uint64 sum = 9;
+}
+
+// a histogram meant to be translated to prometheus
+message FilteredHistogram {
+    required uint64 sum = 1;
+    required uint64 count = 2;
+    repeated Bucket buckets = 3;
+}
+
+// a prometheus histogram bucket
+message Bucket {
+    required uint64 count = 1;
+    // upper range of the bucket (le = less or equal)
+    required uint64 le = 2;
+}
+
+message RequestCounts {
+    map<string, int32> map = 1;
+}
+
+// `0` means unlimited (the feature is disabled). Returned by workers in
+// response to `Request.query_max_connections_per_ip`.
+message MaxConnectionsPerIpLimit {
+    required uint64 limit = 1;
+}
+
+// matches std::net::SocketAddr in the Rust library
+// beware that the ports are expressed with uint32 here,
+// but they should NOT exceed uint16 value
+message SocketAddress {
+    required IpAddress ip = 1;
+    required uint32 port = 2;
+}
+
+message IpAddress {
+    oneof inner {
+        fixed32 v4 = 1;
+        Uint128 v6 = 2;
+    }
+}
+
+// used to represent the 128 bits of an IPv6 address
+message Uint128 {
+    // higher value, first 8 bytes of the ip
+    required uint64 low = 1;
+    // lower value, last 8 bytes of the ip
+    required uint64 high = 2;
+}
+
+// This is sent only from Sōzu to Sōzu
+message WorkerRequest {
+    required string id = 1;
+    required Request content = 2;
+}
+
+// A response as sent by a worker
+message WorkerResponse {
+    required string id = 1;
+    required ResponseStatus status = 2;
+    // an associated message to detail failure, success or processing
+    required string message = 3;
+    optional ResponseContent content = 4;
+}
+
+// label-cardinality knob for the metrics drain.
+// Mirrors HAProxy's `process|frontend|backend|server` extra-counters opt-in:
+// a higher level enables more granular labels (and thus more keys), letting
+// operators bound the StatsD keyspace explicitly.
+//
+// Each level is a SUPERSET of the previous one.
+enum MetricDetail {
+    // proxy-only counters (legacy default before opt-in landed)
+    DETAIL_PROCESS = 0;
+    // adds per-listener (frontend) breakdown for accept/connection counters
+    DETAIL_FRONTEND = 1;
+    // adds per-cluster aggregation (current default)
+    DETAIL_CLUSTER = 2;
+    // adds per-backend aggregation (cluster + backend, highest cardinality)
+    DETAIL_BACKEND = 3;
+}
+
+// intended to workers
+message ServerMetricsConfig {
+    required string address = 1;
+    required bool tagged_metrics = 2;
+    optional string prefix = 3;
+    // optional in proto: workers built before this field default to
+    // DETAIL_CLUSTER on the lib side to preserve historical behaviour.
+    optional MetricDetail detail = 4;
+}
+
+// Used by a worker to start its server loop.
+// The defaults should match those of the config module
+message ServerConfig {
+    required uint64 max_connections = 1 [default = 10000];
+    required uint32 front_timeout = 2 [default = 60];
+    required uint32 back_timeout = 3 [default = 30];
+    required uint32 connect_timeout = 4 [default = 3];
+    required uint32 zombie_check_interval = 5 [default = 1800];
+    required uint32 accept_queue_timeout = 6 [default = 60];
+    required uint64 min_buffers = 7 [default = 1];
+    required uint64 max_buffers = 8 [default = 1000];
+    required uint64 buffer_size = 9 [default = 16393];
+    required string log_level = 10 [default = "info"];
+    required string log_target = 11 [default = "stdout"];
+    optional string access_logs_target = 12;
+    required uint64 command_buffer_size = 13 [default = 1000000];
+    required uint64 max_command_buffer_size = 14 [default = 2000000];
+    optional ServerMetricsConfig metrics = 15;
+    required ProtobufAccessLogFormat access_log_format = 16;
+    required bool log_colored = 17;
+    // Dedicated file path for the control-plane audit trail. When set on the
+    // main process, every audit line is also appended to this file opened
+    // `O_APPEND | O_CREAT` with mode `0o640`. Workers currently ignore this
+    // field (audit only lives on the main), but the field is propagated on
+    // the proto wire so a future worker-side audit path can pick it up.
+    optional string audit_logs_target = 18;
+    // Dedicated JSON mirror of the audit log. One JSON object per line for
+    // SIEM ingest. Same lifecycle as `audit_logs_target`.
+    optional string audit_logs_json_target = 19;
+    // Slab capacity multiplier per connection. Defaults to 4 to accommodate
+    // H2 multiplexing (1 frontend + up to 3 backend connections per
+    // frontend). Operators with topologies that fan out across more clusters
+    // per session can raise this; the slab capacity is computed as
+    // `10 + slab_entries_per_connection * max_connections`. Clamped to
+    // [2, 32] at config-load time. The previous compile-time constant was
+    // 4 and remains the default.
+    optional uint64 slab_entries_per_connection = 20;
+    // Maximum length, in bytes, of a base64-decoded `Authorization: Basic`
+    // payload accepted by `mux::auth`. Caps the per-failed-auth allocation
+    // so a hostile peer cannot force the worker to decode arbitrarily
+    // large tokens. RFC 7617 imposes no upper bound; the default is 4096
+    // (well above the realistic shape `username:password`). Operators on
+    // tight memory budgets can lower this to 256-512; values that approach
+    // the per-frontend `buffer_size` raise a warning at config-load time
+    // (see config.rs validation). Set once at worker boot via
+    // `mux::auth::set_max_decoded_credential_bytes`.
+    optional uint64 basic_auth_max_credential_bytes = 21;
+    // when the accept queue is full (max_connections reached), evict the
+    // least recently active sessions to make room for new connections.
+    // Defaults to false: during DDoS, existing connections are likely real clients.
+    optional bool evict_on_queue_full = 22 [default = false];
+    // Default per-(cluster, source-IP) connection limit. `0` means unlimited
+    // (the default). When a request resolves to a cluster whose
+    // `(cluster_id, client_ip)` already holds this many concurrent
+    // connections, the proxy answers HTTP 429 (H1 + H2) or closes the TCP
+    // socket gracefully. Each cluster may override with its own
+    // `max_connections_per_ip`. The source IP is the proxy-protocol
+    // address when present, else `peer_addr`.
+    optional uint64 max_connections_per_ip = 23 [default = 0];
+    // Default `Retry-After` header value (seconds) sent on HTTP 429
+    // responses. `0` omits the header (rendering `Retry-After: 0` invites
+    // an immediate retry that defeats the limit). Per-cluster overrides
+    // are available on the `Cluster` message. TCP rejections do not emit
+    // this value (no HTTP envelope), but it is still accepted in the
+    // proto/config shape for symmetry.
+    optional uint32 retry_after = 24 [default = 60];
+    // Requested kernel-pipe capacity, in bytes, for each `splice(2)`
+    // zero-copy direction in the `Pipe` protocol. Applied via
+    // `fcntl(F_SETPIPE_SZ)` per pipe at `SplicePipe::new`; the kernel
+    // rounds up to a page boundary and caps the value at
+    // `/proc/sys/fs/pipe-max-size` (default 1 MiB for unprivileged
+    // processes; CAP_SYS_RESOURCE goes higher). The realised capacity
+    // is read back via `fcntl(F_GETPIPE_SZ)` and used as the per-call
+    // `len` for `splice_in`. `None` keeps the kernel default of 64 KiB.
+    // Larger values amortise syscalls and reduce wakeups for bulk-
+    // transfer workloads at the cost of per-session pinned memory.
+    // Linux-only; ignored on builds without the `splice` feature.
+    optional uint64 splice_pipe_capacity_bytes = 25;
+}
+
+enum ProtobufAccessLogFormat {
+    Ascii = 1;
+    Protobuf = 2;
+}
+
+// Addresses of listeners, passed to new workers
+message ListenersCount {
+    // socket addresses of HTTP listeners
+    repeated string http = 1;
+    // socket addresses of HTTPS listeners
+    repeated string tls = 2;
+    // socket addresses of TCP listeners
+    repeated string tcp = 3;
+}
+
+// the Sōzu state, passed to a new worker.
+// Consists in a collection of worker requests
+message InitialState {
+    repeated WorkerRequest requests = 1;
+}
+
+message OpenTelemetry {
+    required string trace_id = 1;
+    required string span_id = 2;
+    optional string parent_span_id = 3;
+}
+
+// An access log, meant to be passed to another agent
+message ProtobufAccessLog {
+    // error message if any
+    optional string message = 1;
+    // LogContext = request_id + cluster_id + backend_id
+    required Uint128 request_id = 2;
+    // id of the cluster (set of frontend, backend, routing rules)
+    optional string cluster_id = 3;
+    // id of the backend (the server to which the traffic is redirected)
+    optional string backend_id = 4;
+    // ip and port of the client
+    optional SocketAddress session_address = 5;
+    // socket address of the backend server
+    optional SocketAddress backend_address = 6;
+    // the protocol, with SSL/TLS version, for instance "HTTPS-TLS1.1"
+    required string protocol = 7;
+    // TCP or HTTP endpoint (method, path, context...)
+    required ProtobufEndpoint endpoint = 8;
+    // round trip time for the client (microseconds)
+    optional uint64 client_rtt = 9;
+    // round trip time for the backend (microseconds)
+    optional uint64 server_rtt = 10;
+    // time spent on a session (microseconds)
+    required uint64 service_time = 13;
+    // number of bytes received from the client
+    required uint64 bytes_in = 14;
+    // number of bytes written to the client
+    required uint64 bytes_out = 15;
+    // value of the User-Agent header, if any
+    optional string user_agent = 16;
+    // custom tags as key-values, for instance owner_id: MyOrganisation
+    map<string, string> tags = 17;
+    // short description of which process sends the log, for instance: "WRK-02"
+    required string tag = 18;
+    // POSIX timestamp, nanoseconds
+    required Uint128 time = 19;
+    // Entire time between first byte received and last byte of the response.
+    // If a request ends abruptly before the last byte is transmitted,
+    // the `request_time` produced is the time elapsed since the first byte received.
+    optional uint64 request_time = 20;
+    // time for the backend to respond (microseconds)
+    optional uint64 response_time = 21;
+    // OpenTelemetry tracing information
+    optional OpenTelemetry otel = 22;
+    // connection/session ULID — stable across all requests multiplexed on the
+    // same TCP or TLS connection. Distinct from `request_id`, which is set
+    // per-request (one per H2 stream, one per H1 keep-alive exchange).
+    optional Uint128 session_id = 23;
+    // Value of the `x-request-id` header as forwarded to the backend —
+    // either preserved verbatim from the client/upstream LB, or derived from
+    // the request ULID when the client did not supply one. Universal
+    // correlation key for end-to-end tracing across Envoy/HAProxy/Sōzu hops.
+    optional string x_request_id = 24;
+    // Negotiated TLS protocol version, short-form (e.g. "TLSv1.3"). Captured
+    // once at handshake completion. `None` for plaintext listeners or when
+    // the kkanupriyaphd21-dev version label is unknown to Sōzu.
+    optional string tls_version = 25;
+    // Negotiated TLS cipher suite, short-form (e.g.
+    // "TLS_AES_128_GCM_SHA256"). Captured once at handshake completion.
+    // `None` for plaintext listeners or when the kkanupriyaphd21-dev cipher label is
+    // unknown to Sōzu.
+    optional string tls_cipher = 26;
+    // TLS Server Name Indication (SNI) sent by the client at handshake.
+    // Stored pre-lowercased without a port. `None` for plaintext listeners
+    // or when the client omitted the SNI extension.
+    optional string tls_sni = 27;
+    // Negotiated ALPN protocol, short-form (e.g. "h2", "http/1.1"). `None`
+    // for plaintext listeners or when no ALPN was negotiated.
+    optional string tls_alpn = 28;
+    // Verbatim value of the client-supplied `X-Forwarded-For` header as
+    // observed before Sōzu appended its own hop. Comma-separated chain of
+    // proxy hops (e.g. `"203.0.113.5, 198.51.100.10"`). `None` if no
+    // upstream proxy supplied the header.
+    optional string xff_chain = 29;
+}
+
+message ProtobufEndpoint {
+    oneof inner {
+        HttpEndpoint http = 1;
+        TcpEndpoint tcp = 2;
+    }
+}
+
+message HttpEndpoint {
+    optional string method = 1;
+    optional string authority = 2;
+    optional string path = 3;
+    // warning: this should be a u16 but protobuf only has uint32.
+    // Make sure the value never exceeds u16 bounds.
+    optional uint32 status = 4;
+    optional string reason = 5;
+}
+
+message TcpEndpoint {}

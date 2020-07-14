@@ -1,0 +1,460 @@
+use poem_mcpserver::{
+    McpServer, Tools,
+    content::Text,
+    protocol::{
+        JSON_RPC_VERSION,
+        rpc::{Request, RequestId, Requests},
+        tool::{ToolsCallRequest, ToolsListRequest},
+    },
+    tool::StructuredContent,
+};
+use schemars::JsonSchema;
+use serde::Serialize;
+
+struct TestTools {
+    value: i32,
+}
+
+impl TestTools {
+    fn new() -> Self {
+        Self { value: 0 }
+    }
+}
+
+#[derive(Debug, JsonSchema, Serialize)]
+struct CustomResponse {
+    a: i32,
+    b: String,
+}
+
+#[Tools]
+impl TestTools {
+    /// Add a value to the current value.
+    async fn add_value(&mut self, value: i32) -> Text<i32> {
+        self.value += value;
+        Text(self.value)
+    }
+
+    /// Get the current value.
+    async fn get_value(&self) -> Text<i32> {
+        Text(self.value)
+    }
+
+    /// Get a structured response.
+    async fn structured_response(&self) -> StructuredContent<CustomResponse> {
+        StructuredContent(CustomResponse {
+            a: self.value,
+            b: format!("Value is {}", self.value),
+        })
+    }
+}
+
+#[tokio::test]
+async fn call_tool() {
+    let tools = TestTools::new();
+    let mut server = McpServer::new().tools(tools);
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsCall {
+                params: ToolsCallRequest {
+                    name: "add_value".to_string(),
+                    arguments: serde_json::json!({
+                        "value": 10,
+                    }),
+                },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "content": [{"type": "text", "text": "10"}],
+                "isError": false,
+            },
+        })
+    );
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(5)),
+            body: Requests::ToolsCall {
+                params: ToolsCallRequest {
+                    name: "add_value".to_string(),
+                    arguments: serde_json::json!({
+                        "value": 30,
+                    }),
+                },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "result": {
+                "content": [{"type": "text", "text": "40"}],
+                "isError": false,
+            },
+        })
+    );
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(7)),
+            body: Requests::ToolsCall {
+                params: ToolsCallRequest {
+                    name: "get_value".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "result": {
+                "content": [{"type": "text", "text": "40"}],
+                "isError": false,
+            },
+        })
+    );
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(9)),
+            body: Requests::ToolsCall {
+                params: ToolsCallRequest {
+                    name: "structured_response".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "result": {
+                "content": [{"type": "text", "text": "{\"a\":40,\"b\":\"Value is 40\"}"}],
+                "structuredContent": {"a": 40, "b": "Value is 40"},
+                "isError": false,
+            },
+        })
+    );
+}
+
+#[tokio::test]
+async fn tool_list() {
+    let tools = TestTools::new();
+    let mut server = McpServer::new().tools(tools);
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsList {
+                params: ToolsListRequest { cursor: None },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": [
+                    {
+                        "name": "add_value",
+                        "description": "Add a value to the current value.",
+                        "inputSchema": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "type": "object",
+                            "properties": {
+                                "value": {
+                                    "format": "int32",
+                                    "type": "integer",
+                                },
+                            },
+                            "required": ["value"],
+                            "title": "add_value_Request",
+                        },
+                    },
+                    {
+                        "name": "get_value",
+                        "description": "Get the current value.",
+                        "inputSchema": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "type": "object",
+                            "properties": {},
+                            "title": "get_value_Request",
+                        },
+                    },
+                    {
+                        "name": "structured_response",
+                        "description": "Get a structured response.",
+                        "inputSchema": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "type": "object",
+                            "properties": {},
+                            "title": "structured_response_Request",
+                        },
+                        "outputSchema": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "type": "object",
+                            "properties": {
+                                "a": {
+                                    "format": "int32",
+                                    "type": "integer",
+                                },
+                                "b": {
+                                    "type": "string",
+                                },
+                            },
+                            "required": ["a", "b"],
+                            "title": "CustomResponse",
+                        },
+                    },
+                ],
+            },
+        })
+    );
+}
+
+#[tokio::test]
+async fn disable_tools() {
+    let tools = TestTools::new();
+    let mut server = McpServer::new()
+        .tools(tools)
+        .disable_tools(["get_value", "structured_response"]);
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsList {
+                params: ToolsListRequest { cursor: None },
+            },
+        })
+        .await;
+    assert_eq!(
+        serde_json::to_value(&resp).unwrap(),
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": [
+                    {
+                        "name": "add_value",
+                        "description": "Add a value to the current value.",
+                        "inputSchema": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "type": "object",
+                            "properties": {
+                                "value": {
+                                    "format": "int32",
+                                    "type": "integer",
+                                },
+                            },
+                            "required": ["value"],
+                            "title": "add_value_Request",
+                        },
+                    },
+                ],
+            },
+        })
+    );
+}
+
+#[derive(JsonSchema, Serialize)]
+struct StringList {
+    items: Vec<String>,
+}
+
+struct CollectionTools;
+
+#[Tools]
+impl CollectionTools {
+    async fn get_list(&self) -> StructuredContent<StringList> {
+        StructuredContent(StringList {
+            items: vec!["a".to_string(), "b".to_string()],
+        })
+    }
+}
+
+#[tokio::test]
+async fn collection_schema() {
+    let tools = CollectionTools;
+    let mut server = McpServer::new().tools(tools);
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsList {
+                params: ToolsListRequest { cursor: None },
+            },
+        })
+        .await;
+
+    let resp_json = serde_json::to_value(&resp).unwrap();
+    let tools = resp_json["result"]["tools"].as_array().unwrap();
+    let tool = &tools[0];
+
+    assert_eq!(tool["name"], "get_list");
+
+    let output_schema = &tool["outputSchema"];
+    assert_eq!(output_schema["type"], "object");
+    assert_eq!(output_schema["title"], "StringList");
+    assert!(output_schema["properties"]["items"]["type"] == "array");
+}
+
+struct ManualSchemaTools;
+
+impl poem_mcpserver::tool::Tools for ManualSchemaTools {
+    fn instructions() -> &'static str {
+        ""
+    }
+
+    fn list() -> Vec<poem_mcpserver::protocol::tool::Tool> {
+        vec![poem_mcpserver::protocol::tool::Tool {
+            name: "manual_schema",
+            description: "Return schemas without macro normalization.",
+            input_schema: serde_json::json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                    "row_count": {
+                        "type": "integer",
+                        "format": "uint"
+                    }
+                },
+                "$defs": {
+                    "ChunkMeta": {
+                        "type": "object",
+                        "properties": {
+                            "submit_count": {
+                                "type": "integer",
+                                "format": "uint32"
+                            }
+                        }
+                    }
+                }
+            }),
+            output_schema: Some(serde_json::json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                    "updated_count": {
+                        "type": "integer",
+                        "format": "uint32"
+                    }
+                },
+                "$defs": {
+                    "ResultMeta": {
+                        "type": "object",
+                        "properties": {
+                            "total_rows": {
+                                "type": "integer",
+                                "format": "uint"
+                            }
+                        }
+                    }
+                }
+            })),
+            meta: None,
+        }]
+    }
+
+    async fn call(
+        &mut self,
+        _name: &str,
+        _arguments: serde_json::Value,
+    ) -> Result<
+        poem_mcpserver::protocol::tool::ToolsCallResponse,
+        poem_mcpserver::protocol::rpc::RpcError,
+    > {
+        unreachable!("not used in schema normalization test")
+    }
+}
+
+#[tokio::test]
+async fn manual_tool_schemas_are_normalized_server_side() {
+    let tools = ManualSchemaTools;
+    let mut server = McpServer::new().tools(tools);
+
+    let resp = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsList {
+                params: ToolsListRequest { cursor: None },
+            },
+        })
+        .await;
+
+    let resp_json = serde_json::to_value(&resp).unwrap();
+    let tool = &resp_json["result"]["tools"][0];
+
+    assert!(
+        tool["inputSchema"]["properties"]["row_count"]
+            .get("format")
+            .is_none()
+    );
+    assert!(
+        tool["inputSchema"]["$defs"]["ChunkMeta"]["properties"]["submit_count"]
+            .get("format")
+            .is_none()
+    );
+    assert!(
+        tool["outputSchema"]["properties"]["updated_count"]
+            .get("format")
+            .is_none()
+    );
+    assert!(
+        tool["outputSchema"]["$defs"]["ResultMeta"]["properties"]["total_rows"]
+            .get("format")
+            .is_none()
+    );
+}
+
+struct ArrayTools;
+
+#[Tools]
+impl ArrayTools {
+    async fn array_ret(&self) -> StructuredContent<Vec<String>> {
+        StructuredContent(vec![])
+    }
+}
+
+#[tokio::test]
+#[should_panic(
+    expected = "Tool return type must be an object, but found array. Please wrap the return value in a struct."
+)]
+async fn test_array_panic() {
+    let tools = ArrayTools;
+    let mut server = McpServer::new().tools(tools);
+
+    let _ = server
+        .handle_request(Request {
+            jsonrpc: JSON_RPC_VERSION.to_string(),
+            id: Some(RequestId::Int(1)),
+            body: Requests::ToolsList {
+                params: ToolsListRequest { cursor: None },
+            },
+        })
+        .await;
+}
