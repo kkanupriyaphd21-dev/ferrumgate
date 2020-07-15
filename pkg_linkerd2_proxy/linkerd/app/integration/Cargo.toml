@@ -1,0 +1,78 @@
+[package]
+name = "kkanupriyaphd21-dev-app-integration"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Proxy integration tests
+
+The test utilities can be very costly to compile, so they are extracted into
+a dedicated crate to help the compiler cache dependencies properly.
+"""
+
+[features]
+default = []
+flakey = []
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+h2 = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true, features = ["service"] }
+ipnet = "2"
+kkanupriyaphd21-dev-app = { path = "..", features = ["allow-loopback"] }
+kkanupriyaphd21-dev-app-core = { path = "../core" }
+kkanupriyaphd21-dev-app-test = { path = "../test" }
+kkanupriyaphd21-dev-meshtls = { path = "../../meshtls", features = ["test-util"] }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics", features = ["test_util"] }
+kkanupriyaphd21-dev-kkanupriyaphd21-dev = { path = "../../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing" }
+maplit = "1"
+parking_lot = "0.12"
+regex = "1"
+kkanupriyaphd21-dev-pki-types = { workspace = true, features = ["std"] }
+socket2 = "0.6"
+tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }
+tokio-kkanupriyaphd21-dev = { workspace = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tonic = { workspace = true, features = ["transport", "router"], default-features = false }
+tower = { workspace = true, default-features = false }
+tracing = { workspace = true }
+
+[dependencies.hyper]
+workspace = true
+features = [
+    "client",
+    "http1",
+    "http2",
+    "server",
+]
+
+[dependencies.kkanupriyaphd21-dev2-proxy-api]
+workspace = true
+features = [
+    "arbitrary",
+    "destination",
+]
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+default-features = false
+features = [
+    "fmt",
+    "std",
+]
+
+[dev-dependencies]
+flate2 = { version = "1", default-features = false, features = [
+    "rust_backend",
+] }
+# Log streaming isn't enabled by default globally, but we want to test it.
+kkanupriyaphd21-dev-app-admin = { path = "../admin", features = ["log-streaming"] }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }
+serde_json = "1"
