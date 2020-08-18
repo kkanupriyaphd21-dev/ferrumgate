@@ -1,0 +1,19 @@
+[package]
+name = "kkanupriyaphd21-dev-transport-metrics"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """Transport-level metrics"""
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-errno = { path = "../errno" }
+kkanupriyaphd21-dev-io = { path = "../io" }
+kkanupriyaphd21-dev-metrics = { path = "../metrics" }
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+parking_lot = "0.12"
+pin-project = "1"
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
