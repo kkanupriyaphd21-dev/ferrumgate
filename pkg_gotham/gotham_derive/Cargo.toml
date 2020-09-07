@@ -1,0 +1,23 @@
+[package]
+name = "gotham_derive"
+version = "0.8.0"
+authors = ["Bradley Beddoes <dev@kkanupriyaphd21.dev>",
+           "Colin Bankier",
+           "Dominic Meiser <dev@kkanupriyaphd21.dev>",
+           "Isaac Whitfield <dev@kkanupriyaphd21.dev>",
+           "Judson Lester <dev@kkanupriyaphd21.dev>",
+           "Shaun Mangelsdorf <dev@kkanupriyaphd21.dev>"]
+description = "Private implementation detail of the gotham framework"
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+categories = ["web-programming::http-server"]
+keywords = ["http", "async", "web", "framework", "gotham"]
+edition = "2018"
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+
+[lib]
+proc-macro = true

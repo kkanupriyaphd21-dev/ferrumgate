@@ -1,0 +1,80 @@
+[package]
+name = "kkanupriyaphd21-dev-app-core"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Core infrastructure for the proxy application
+
+This crate conglomerates proxy configuration, runtime administration, etc,
+independently of the inbound and outbound proxy logic.
+"""
+
+[dependencies]
+drain = { workspace = true, features = ["retain"] }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true, features = ["http1", "http2"] }
+futures = { version = "0.3", default-features = false }
+ipnet = "2.11"
+prometheus-client = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "sync", "parking_lot"] }
+tokio-stream = { version = "0.1", features = ["time"] }
+tonic = { workspace = true, default-features = false }
+tracing = { workspace = true }
+pin-project = "1"
+
+kkanupriyaphd21-dev-addr = { path = "../../addr" }
+kkanupriyaphd21-dev-conditional = { path = "../../conditional" }
+kkanupriyaphd21-dev-dns = { path = "../../dns" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-error-respond = { path = "../../error-respond" }
+kkanupriyaphd21-dev-exp-backoff = { path = "../../exp-backoff" }
+kkanupriyaphd21-dev-http-metrics = { path = "../../http/metrics" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+kkanupriyaphd21-dev-idle-cache = { path = "../../idle-cache" }
+kkanupriyaphd21-dev-io = { path = "../../io" }
+kkanupriyaphd21-dev-meshtls = { path = "../../meshtls", default-features = false }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics", features = ["process", "stack"] }
+kkanupriyaphd21-dev-opentelemetry = { path = "../../opentelemetry" }
+kkanupriyaphd21-dev-proxy-api-resolve = { path = "../../proxy/api-resolve" }
+kkanupriyaphd21-dev-proxy-balance = { path = "../../proxy/balance" }
+kkanupriyaphd21-dev-proxy-core = { path = "../../proxy/core" }
+kkanupriyaphd21-dev-proxy-client-policy = { path = "../../proxy/client-policy" }
+kkanupriyaphd21-dev-proxy-dns-resolve = { path = "../../proxy/dns-resolve" }
+kkanupriyaphd21-dev-proxy-http = { path = "../../proxy/http" }
+kkanupriyaphd21-dev-proxy-identity-client = { path = "../../proxy/identity-client" }
+kkanupriyaphd21-dev-proxy-spire-client = { path = "../../proxy/spire-client" }
+kkanupriyaphd21-dev-proxy-resolve = { path = "../../proxy/resolve" }
+kkanupriyaphd21-dev-proxy-server-policy = { path = "../../proxy/server-policy" }
+kkanupriyaphd21-dev-proxy-tap = { path = "../../proxy/tap" }
+kkanupriyaphd21-dev-proxy-tcp = { path = "../../proxy/tcp" }
+kkanupriyaphd21-dev-proxy-transport = { path = "../../proxy/transport" }
+kkanupriyaphd21-dev-reconnect = { path = "../../reconnect" }
+kkanupriyaphd21-dev-router = { path = "../../router" }
+kkanupriyaphd21-dev-kkanupriyaphd21-dev = { path = "../../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-service-profiles = { path = "../../service-profiles" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+kkanupriyaphd21-dev-stack-metrics = { path = "../../stack/metrics" }
+kkanupriyaphd21-dev-stack-tracing = { path = "../../stack/tracing" }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing" }
+kkanupriyaphd21-dev-transport-header = { path = "../../transport-header" }
+kkanupriyaphd21-dev-transport-metrics = { path = "../../transport-metrics" }
+kkanupriyaphd21-dev-tls = { path = "../../tls" }
+kkanupriyaphd21-dev-trace-context = { path = "../../trace-context" }
+
+[dependencies.tower]
+workspace = true
+default-features = false
+features = ["make", "spawn-ready", "timeout", "util", "limit"]
+
+[build-dependencies]
+semver = "1"
+
+[dev-dependencies]
+bytes = { workspace = true }
+http-body-util = { workspace = true }
+kkanupriyaphd21-dev-mock-http-body = { path = "../../mock/http-body" }

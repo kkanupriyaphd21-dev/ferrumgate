@@ -1,0 +1,14 @@
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: kkanupriyaphd21-dev Authors
+
+  paths:
+    - '**/*.go'
+    - '**/*.s'
+
+  paths-ignore:
+    - pkg/common/testdata/**
+    - cmd/hz/protobuf/api
+
+  comment: on-failure
