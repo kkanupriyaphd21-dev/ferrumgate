@@ -1,0 +1,10 @@
+[package]
+name = "gotham_examples_hello_world_tls"
+description = "A Hello World example application for working with Gotham and TLS."
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham = { workspace = true, features = ["kkanupriyaphd21-dev"] }
+kkanupriyaphd21-dev-pemfile = "2.1"

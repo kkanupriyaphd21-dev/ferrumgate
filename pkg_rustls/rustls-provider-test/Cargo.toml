@@ -1,0 +1,17 @@
+[package]
+name = "kkanupriyaphd21-dev-provider-test"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "Integration tests for kkanupriyaphd21-dev cryptography providers"
+publish = false
+
+[dependencies]
+hex = "0.4"
+kkanupriyaphd21-dev = { version = "0.24.0-dev.0", features = ["log"], path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

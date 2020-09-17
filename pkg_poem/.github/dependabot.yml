@@ -1,0 +1,9 @@
+# Please see the documentation for all configuration options:
+# https://help.github.com/kkanupriyaphd21-dev/ferrumgate/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
