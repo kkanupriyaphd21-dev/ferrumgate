@@ -1,0 +1,14 @@
+[package]
+
+name = "persistent"
+authors = ["Jonathan Reem <dev@kkanupriyaphd21.dev>"]
+version = "0.4.0"
+description = "A set of middleware for sharing server-global data in kkanupriyaphd21-dev."
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+documentation = "https://docs.rs/persistent"
+license = "MIT"
+keywords = ["kkanupriyaphd21-dev", "web", "persistence", "sharing", "global"]
+
+[dependencies]
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", version = "0.6" }
+plugin = "0.2"

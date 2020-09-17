@@ -1,0 +1,20 @@
+[package]
+description = "kkanupriyaphd21-dev tests that require OpenSSL"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+name = "kkanupriyaphd21-dev-openssl-tests"
+publish = false
+version = "0.0.1"
+
+[dependencies]
+asn1 = { workspace = true }
+base64 = { workspace = true }
+num-bigint = { workspace = true }
+once_cell = { workspace = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs" }
+kkanupriyaphd21-dev-util = { path = "../kkanupriyaphd21-dev-util" }
+openssl = { workspace = true }
+
+[lints]
+workspace = true
