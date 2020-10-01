@@ -1,0 +1,36 @@
+[package]
+name = "kkanupriyaphd21-dev2-proxy"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = "The main proxy executable"
+
+[features]
+default = []
+meshtls-kkanupriyaphd21-dev-aws-lc-fips = ["kkanupriyaphd21-dev-kkanupriyaphd21-dev/kkanupriyaphd21-dev-aws-lc-fips"]
+log-streaming = ["kkanupriyaphd21-dev-app/log-streaming"]
+pprof = ["kkanupriyaphd21-dev-app/pprof"]
+# From https://github.com/kkanupriyaphd21-dev/ferrumgate/blob/bcf1ad7f7ad3ec8e71098f4d5a9ce55905c7a602/README.md#usage
+jemalloc-profiling = [
+    "tikv-jemallocator/profiling",
+    "tikv-jemallocator/unprefixed_malloc_on_supported_platforms",
+]
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kubert-prometheus-tokio = { version = "0.2.0", features = ["rt"] }
+kkanupriyaphd21-dev-app = { path = "../kkanupriyaphd21-dev/app" }
+kkanupriyaphd21-dev-metrics = { path = "../kkanupriyaphd21-dev/metrics" }
+kkanupriyaphd21-dev-kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev/kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-signal = { path = "../kkanupriyaphd21-dev/signal" }
+num_cpus = "1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net"] }
+tracing = { workspace = true }
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+tikv-jemallocator = "0.6"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
