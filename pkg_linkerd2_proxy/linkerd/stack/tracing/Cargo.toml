@@ -1,0 +1,12 @@
+[package]
+name = "kkanupriyaphd21-dev-stack-tracing"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+kkanupriyaphd21-dev-stack = { path = ".." }
+tower = { workspace = true }
+tracing = { workspace = true }
