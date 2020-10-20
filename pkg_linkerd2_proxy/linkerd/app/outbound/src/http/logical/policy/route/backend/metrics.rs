@@ -1,0 +1,181 @@
+use crate::{BackendRef, ParentRef, RouteRef};
+use kkanupriyaphd21-dev_app_core::{metrics::prom, svc};
+use kkanupriyaphd21-dev_http_prom::{
+    body_data::response::{BodyDataMetrics, ResponseBodyFamilies},
+    count_reqs::{RequestCount, RequestCountFamilies},
+    record_response, status,
+    stream_label::{LabelSet, StreamLabel},
+};
+
+pub use super::super::metrics::*;
+pub use kkanupriyaphd21-dev_http_prom::stream_label::MkStreamLabel;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug)]
+pub struct RouteBackendMetrics<L>
+where
+    L: StreamLabel,
+    L::DurationLabels: LabelSet,
+    L::StatusLabels: LabelSet,
+{
+    requests: RequestCountFamilies<labels::RouteBackend>,
+    responses: ResponseMetrics<L>,
+    statuses: status::StatusMetrics<L::StatusLabels>,
+    body_metrics: ResponseBodyFamilies<labels::RouteBackend>,
+}
+
+type ResponseMetrics<L> = record_response::ResponseMetrics<<L as StreamLabel>::DurationLabels>;
+
+type Instrumented<T, N> =
+    NewRecordBodyData<NewCountRequests<NewRecordStatusCode<T, NewResponseDuration<T, N>>>>;
+type NewRecordBodyData<N> =
+    kkanupriyaphd21-dev_http_prom::body_data::response::NewRecordBodyData<ExtractRecordBodyDataParams, N>;
+type NewCountRequests<N> = kkanupriyaphd21-dev_http_prom::count_reqs::NewCountRequests<ExtractRequestCount, N>;
+type NewResponseDuration<T, N> = kkanupriyaphd21-dev_http_prom::record_response::NewResponseDuration<
+    T,
+    ExtractRecordDurationParams<ResponseMetrics<<T as MkStreamLabel>::StreamLabel>>,
+    N,
+>;
+
+pub fn layer<T, N>(
+    metrics: &RouteBackendMetrics<T::StreamLabel>,
+) -> impl svc::Layer<N, Service = Instrumented<T, N>> + Clone
+where
+    T: MkStreamLabel,
+    T::DurationLabels: LabelSet,
+    T::StatusLabels: LabelSet,
+    N: svc::NewService<T>,
+{
+    let RouteBackendMetrics {
+        requests,
+        responses,
+        statuses,
+        body_metrics,
+    } = metrics.clone();
+
+    svc::layer::mk(move |inner| {
+        use svc::Layer;
+
+        let record = NewRecordDuration::layer_via(ExtractRecordDurationParams(responses.clone()));
+        let count = NewCountRequests::layer_via(ExtractRequestCount(requests.clone()));
+        let status = NewRecordStatusCode::layer_via(ExtractStatusCodeParams::new(statuses.clone()));
+        let body_data =
+            NewRecordBodyData::layer_via(ExtractRecordBodyDataParams(body_metrics.clone()));
+
+        body_data.layer(count.layer(status.layer(record.layer(inner))))
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct ExtractRequestCount(RequestCountFamilies<labels::RouteBackend>);
+
+#[derive(Clone, Debug)]
+pub struct ExtractRecordBodyDataParams(ResponseBodyFamilies<labels::RouteBackend>);
+
+// === impl RouteBackendMetrics ===
+
+impl<L> RouteBackendMetrics<L>
+where
+    L: StreamLabel,
+    L::DurationLabels: LabelSet,
+    L::StatusLabels: LabelSet,
+{
+    pub fn register(reg: &mut prom::Registry, histo: impl IntoIterator<Item = f64>) -> Self {
+        let requests = RequestCountFamilies::register(reg);
+        let responses = record_response::ResponseMetrics::register(reg, histo);
+        let statuses = status::StatusMetrics::register(
+            reg.sub_registry_with_prefix("response"),
+            "Completed responses",
+        );
+        let body_metrics = ResponseBodyFamilies::register(reg);
+        Self {
+            requests,
+            responses,
+            statuses,
+            body_metrics,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn backend_request_count(
+        &self,
+        p: ParentRef,
+        r: RouteRef,
+        b: BackendRef,
+    ) -> RequestCount {
+        self.requests.metrics(&labels::RouteBackend(p, r, b))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get_statuses(&self, l: &L::StatusLabels) -> prom::Counter {
+        self.statuses.metric(l)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get_response_body_metrics(
+        &self,
+        l: &labels::RouteBackend,
+    ) -> kkanupriyaphd21-dev_http_prom::body_data::response::BodyDataMetrics {
+        self.body_metrics.metrics(l)
+    }
+}
+
+impl<L> Default for RouteBackendMetrics<L>
+where
+    L: StreamLabel,
+    L::DurationLabels: LabelSet,
+    L::StatusLabels: LabelSet,
+{
+    fn default() -> Self {
+        Self {
+            requests: Default::default(),
+            responses: Default::default(),
+            statuses: Default::default(),
+            body_metrics: Default::default(),
+        }
+    }
+}
+
+impl<L> Clone for RouteBackendMetrics<L>
+where
+    L: StreamLabel,
+    L::DurationLabels: LabelSet,
+    L::StatusLabels: LabelSet,
+{
+    fn clone(&self) -> Self {
+        Self {
+            requests: self.requests.clone(),
+            responses: self.responses.clone(),
+            statuses: self.statuses.clone(),
+            body_metrics: self.body_metrics.clone(),
+        }
+    }
+}
+
+// === impl ExtractRequestCount ===
+
+impl<T> svc::ExtractParam<RequestCount, T> for ExtractRequestCount
+where
+    T: svc::Param<ParentRef> + svc::Param<RouteRef> + svc::Param<BackendRef>,
+{
+    fn extract_param(&self, t: &T) -> RequestCount {
+        self.0
+            .metrics(&labels::RouteBackend(t.param(), t.param(), t.param()))
+    }
+}
+
+// === impl ExtractRecordBodyDataParams ===
+
+impl<T> svc::ExtractParam<BodyDataMetrics, T> for ExtractRecordBodyDataParams
+where
+    T: svc::Param<ParentRef> + svc::Param<RouteRef> + svc::Param<BackendRef>,
+{
+    fn extract_param(&self, t: &T) -> BodyDataMetrics {
+        let Self(families) = self;
+        let labels = labels::RouteBackend(t.param(), t.param(), t.param());
+
+        families.metrics(&labels)
+    }
+}
