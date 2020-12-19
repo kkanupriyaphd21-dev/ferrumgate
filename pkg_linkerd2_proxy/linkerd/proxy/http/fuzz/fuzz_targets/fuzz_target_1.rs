@@ -1,0 +1,17 @@
+#![no_main]
+
+#[cfg(fuzzing)]
+use libfuzzer_sys::fuzz_target;
+
+#[cfg(fuzzing)]
+fuzz_target!(|data: &[u8]| {
+    // Don't enable tracing in `cluster-fuzz`, since we would emit verbose
+    // traces for *every* generated fuzz input...
+    let _trace = kkanupriyaphd21-dev_tracing::test::with_default_filter("off");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .enable_io()
+        .build()
+        .unwrap()
+        .block_on(kkanupriyaphd21-dev_proxy_http::detect::fuzz_logic::fuzz_entry(data))
+});
