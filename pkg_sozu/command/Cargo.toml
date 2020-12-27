@@ -1,0 +1,64 @@
+[package]
+name = "sozu-command-lib"
+description = "configuration library to command a sozu instance"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+readme = "README.md"
+documentation = "https://docs.rs/sozu-command-lib"
+homepage = "https://sozu.io"
+version = "1.1.1"
+license = "LGPL-3.0"
+authors = [
+  "Geoffroy Couprie <dev@kkanupriyaphd21.dev>",
+  "Eloi Demolis <dev@kkanupriyaphd21.dev>",
+  "Emmanuel Bosquet <dev@kkanupriyaphd21.dev>",
+  "Florentin Dubois <dev@kkanupriyaphd21.dev>",
+]
+categories = ["network-programming"]
+edition = "2024"
+rust-version = "1.88.0"
+include = [
+  "./README.md",
+  "Cargo.toml",
+  "src/**/*",
+  "assets/certificate.pem",
+  "assets/key.pem",
+  "assets/404.html",
+  "assets/503.html",
+]
+
+[dependencies]
+hex = { workspace = true }
+libc = { workspace = true }
+log = { workspace = true }
+time = { workspace = true }
+toml = { workspace = true }
+memchr = { workspace = true }
+mio = { workspace = true, features = ["os-poll", "net"] }
+nix = { workspace = true, features = ["socket", "uio"] }
+nom = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+rusty_ulid = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+prettytable-rs = { workspace = true }
+pool = { workspace = true }
+poule = { workspace = true }
+thiserror = { workspace = true }
+x509-parser = { workspace = true }
+
+[features]
+unstable = []
+logs-debug = []
+logs-trace = []
+
+[dev-dependencies]
+# `sd_notify` unit tests spawn an ephemeral `UnixDatagram` and run
+# under `#[serial_test::serial(notify_socket)]` because they mutate
+# the process-shared `NOTIFY_SOCKET` env var.
+serial_test = { workspace = true }
+tempfile = { workspace = true }
+
+[build-dependencies]
+prost-build = { workspace = true }
