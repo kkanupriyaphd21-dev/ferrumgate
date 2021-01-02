@@ -1,0 +1,33 @@
+[package]
+name = "kkanupriyaphd21-dev-test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+default = ["aws-lc-rs", "brotli", "log", "ring", "zlib"]
+aws-lc-rs = ["dep:kkanupriyaphd21-dev-aws-lc-rs"]
+brotli = ["kkanupriyaphd21-dev/brotli"]
+fips = ["kkanupriyaphd21-dev-aws-lc-rs/fips"]
+log = ["kkanupriyaphd21-dev/log", "kkanupriyaphd21-dev-util/log"]
+ring = ["dep:kkanupriyaphd21-dev-ring"]
+zlib = ["kkanupriyaphd21-dev/zlib"]
+
+[dependencies]
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", default-features = false, features = ["webpki"] }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs", features = ["std"], optional = true }
+kkanupriyaphd21-dev-ring = { path = "../kkanupriyaphd21-dev-ring", optional = true }
+kkanupriyaphd21-dev-util = { path = "../kkanupriyaphd21-dev-util", default-features = false }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+log = { workspace = true }
+macro_rules_attribute = { workspace = true }
+num-bigint = { workspace = true }
+pki-types = { workspace = true }
+x509-parser = { workspace = true }
+webpki = { workspace = true }
+webpki-roots = { workspace = true }
+
+[lints]
+workspace = true

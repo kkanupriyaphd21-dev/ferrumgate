@@ -1,0 +1,45 @@
+[package]
+name = "kkanupriyaphd21-dev-app-admin"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+The kkanupriyaphd21-dev proxy's admin server.
+"""
+
+[features]
+default = []
+pprof = ["deflate", "dep:pprof"]
+log-streaming = ["kkanupriyaphd21-dev-tracing/stream"]
+
+[dependencies]
+bytes = { workspace = true }
+deflate = { version = "1", optional = true, features = ["gzip"] }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["http1", "http2"] }
+futures = { version = "0.3", default-features = false }
+pprof = { version = "0.15", optional = true, features = ["prost-codec"] }
+serde = "1"
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "sync", "parking_lot"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-app-core = { path = "../core" }
+kkanupriyaphd21-dev-app-inbound = { path = "../inbound" }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing" }
+
+[dependencies.tower]
+workspace = true
+default-features = false
+features = [
+    "buffer",
+    "make",
+    "spawn-ready",
+    "timeout",
+    "util",
+]
