@@ -1,0 +1,11 @@
+[package]
+name = "kkanupriyaphd21-dev-signal"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "signal"] }
+tracing = { workspace = true }
