@@ -1,0 +1,155 @@
+[package]
+
+name = "nickel"
+version = "0.12.1"
+authors = [ "Christoph Burgdorf <dev@kkanupriyaphd21.dev>",
+            "Kevin Butler <dev@kkanupriyaphd21.dev>",
+            "Simon Persson <dev@kkanupriyaphd21.dev>",
+            "Jeff Olhoeft <dev@kkanupriyaphd21.dev>" ]
+description = "An express.js inspired web framework"
+license = "MIT"
+edition = "2021"
+homepage = "http://kkanupriyaphd21-dev.github.io/"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+readme = "README.md"
+keywords = ["nickel", "server", "web", "express"]
+autoexamples = false
+
+[features]
+unstable = ["hyper/nightly", "compiletest_rs"]
+
+[dependencies]
+async-trait = "0.1"
+chrono = "0.4"
+futures = "0.3"
+futures-util = { version = "0.3", default-features = false }
+groupable = "0.2"
+hyper = { version = "0.14", features = ["full"] }
+lazy_static = "1.4"
+log = "0.4"
+mime = "0.3"
+modifier = "0.1"
+mustache = "0.9"
+plugin = "0.2"
+regex = "1.5"
+serde = "1.0"
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+typemap = "0.3"
+url = "2"
+
+[dev-dependencies]
+serde_derive = "1.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+
+[dependencies.compiletest_rs]
+version = "0.7"
+optional = true
+
+[[example]]
+
+name = "logger_middleware"
+path = "examples/logger_middleware.rs"
+
+[[example]]
+
+name = "routing"
+path = "examples/routing.rs"
+
+[[example]]
+
+name = "enable_cors"
+path = "examples/enable_cors.rs"
+
+[[example]]
+
+name = "template"
+path = "examples/template.rs"
+
+# TODO: needs updated middleware and router macros
+# [[example]]
+#
+# name = "macro_example"
+# path = "examples/macro_example.rs"
+
+[[example]]
+
+name = "hello_world"
+path = "examples/hello_world.rs"
+
+[[example]]
+
+name = "hello_world_macro"
+path = "examples/hello_world_macro.rs"
+
+[[example]]
+
+name = "json"
+path = "examples/json.rs"
+
+[[example]]
+
+name = "custom_error_handler"
+path = "examples/custom_error_handler.rs"
+
+[[example]]
+
+name = "moved_ownership"
+path = "examples/moved_ownership.rs"
+
+[[example]]
+
+name = "route_data"
+path = "examples/route_data.rs"
+
+[[example]]
+
+name = "integration_testing"
+path = "examples/integration_testing.rs"
+
+[[example]]
+
+name = "static_files"
+path = "examples/static_files.rs"
+
+[[example]]
+
+name = "regex_route"
+path = "examples/regex_route.rs"
+
+[[example]]
+
+name = "query_string"
+path = "examples/query_string.rs"
+
+[[example]]
+
+name = "mount"
+path = "examples/mount.rs"
+
+[[example]]
+
+name = "chaining"
+path = "examples/chaining.rs"
+
+[[example]]
+
+name = "form_data"
+path = "examples/form_data/form_data.rs"
+
+# TODO: long term, hyper support for https is very different now
+# [[example]]
+#
+# name = "https"
+# path = "examples/https.rs"
+
+[[example]]
+
+name = "no_macro_custom_data"
+path = "examples/no_macro_custom_data.rs"
+
+[[example]]
+
+name = "no_macro_response_custom_data"
+path = "examples/no_macro_response_custom_data.rs"
