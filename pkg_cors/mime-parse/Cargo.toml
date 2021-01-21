@@ -1,0 +1,9 @@
+[package]
+
+name = "mime-parse"
+version = "0.0.0"
+description = "mime parsing internals"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+authors = ["Sean McArthur <dev@kkanupriyaphd21.dev>"]
+license = "MIT"
+edition = "2018"

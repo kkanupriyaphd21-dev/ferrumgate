@@ -1,0 +1,99 @@
+[workspace.package]
+license = "MIT/Apache-2.0"
+homepage = "https://gotham.rs/"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+
+[workspace.dependencies]
+borrow-bag = { path = "misc/borrow_bag", version = "1.1.1" }
+gotham = { path = "gotham", version = "0.8.0", default-features = false }
+gotham_derive = { path = "gotham_derive", version = "0.8.0" }
+gotham_middleware_diesel = { path = "middleware/diesel", version = "0.6.0" }
+gotham_middleware_jwt = { path = "middleware/jwt", version = "0.9.0" }
+
+[workspace]
+members = [
+    ## Gotham Core
+    "gotham",
+    "gotham_derive",
+    "misc/borrow_bag",
+
+    ## Middleware
+    "middleware/template",
+    "middleware/diesel",
+    "middleware/jwt",
+
+    ## Examples (these crates are not published)
+    "examples/hello_world",
+    "examples/hello_world_tls",
+    "examples/hello_world_until",
+    "examples/shared_state",
+
+    # Tera template
+    "examples/templating/tera",
+
+    # Askama template
+    "examples/templating/askama",
+
+    # routing
+    "examples/routing/introduction",
+    "examples/routing/http_verbs",
+    "examples/routing/scopes",
+    "examples/routing/associations",
+
+    # path
+    "examples/path/introduction",
+    "examples/path/globs",
+    "examples/path/regex",
+
+    # query_string
+    "examples/query_string/introduction",
+
+    # cookies
+    "examples/cookies/introduction",
+
+    # sessions
+    "examples/sessions/introduction",
+    "examples/sessions/custom_data_type",
+
+    # headers
+    "examples/headers/setting",
+
+    # middleware
+    "examples/middleware/introduction",
+    "examples/middleware/introduction_await",
+    "examples/middleware/multiple_pipelines",
+
+    # into_response
+    "examples/into_response/introduction",
+
+    # handlers
+    "examples/handlers/request_data",
+    "examples/handlers/stateful",
+    "examples/handlers/simple_async_handlers",
+    "examples/handlers/simple_async_handlers_await",
+    "examples/handlers/async_handlers",
+    "examples/handlers/form_urlencoded",
+    "examples/handlers/multipart",
+
+    # static_assets
+    "examples/static_assets",
+
+    # diesel
+    "examples/diesel",
+
+    # openssl
+    # TODO: Re-enable when this example is updated
+    # "examples/openssl",
+
+    # example_contribution_template
+    "examples/example_contribution_template/name",
+
+    # websocket
+    "examples/websocket",
+
+    # finalizer
+    "examples/finalizers/",
+
+    # custom_service
+    "examples/custom_service/",
+]

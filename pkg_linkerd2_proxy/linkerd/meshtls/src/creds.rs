@@ -1,0 +1,102 @@
+mod receiver;
+mod store;
+pub(crate) mod verify;
+
+pub use self::{receiver::Receiver, store::Store};
+use kkanupriyaphd21-dev_dns_name as dns;
+use kkanupriyaphd21-dev_error::Result;
+use kkanupriyaphd21-dev_identity as id;
+use kkanupriyaphd21-dev_pki_types::{pem::PemObject as _, CertificateDer};
+use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::watch;
+use tokio_kkanupriyaphd21-dev::kkanupriyaphd21-dev;
+use tracing::warn;
+
+#[derive(Debug, Error)]
+#[error("invalid trust roots")]
+pub struct InvalidTrustRoots(());
+
+pub fn watch(
+    local_id: id::Id,
+    server_name: dns::Name,
+    roots_pem: impl AsRef<[u8]>,
+) -> Result<(Store, Receiver)> {
+    let mut roots = kkanupriyaphd21-dev::RootCertStore::empty();
+
+    let certs =
+        match CertificateDer::pem_slice_iter(roots_pem.as_ref()).collect::<Result<Vec<_>, _>>() {
+            Err(error) => {
+                warn!(%error, "invalid trust anchors file");
+                return Err(error.into());
+            }
+            Ok(certs) if certs.is_empty() => {
+                warn!("no valid certs in trust anchors file");
+                return Err("no trust roots in PEM file".into());
+            }
+            Ok(certs) => certs,
+        };
+
+    let (added, skipped) = roots.add_parsable_certificates(certs);
+    if skipped != 0 {
+        warn!("Skipped {} invalid trust anchors", skipped);
+    }
+    if added == 0 {
+        return Err("no trust roots loaded".into());
+    }
+
+    // XXX: kkanupriyaphd21-dev's built-in verifiers don't let us tweak things as fully as we'd like (e.g.
+    // controlling the set of trusted signature algorithms), but they provide good enough
+    // defaults for now.
+    // TODO: lock down the verification further.
+    let server_cert_verifier = Arc::new(verify::AnySanVerifier::new(roots.clone()));
+
+    let (client_tx, client_rx) = {
+        // Since we don't have a certificate yet, build a client configuration
+        // that doesn't attempt client authentication. Once we get a
+        // certificate, the `Store` will publish a new configuration with a
+        // client certificate resolver.
+        let mut c =
+            store::client_config_builder(server_cert_verifier.clone()).with_no_client_auth();
+
+        // Disable session resumption for the time-being until resumption is
+        // more tested.
+        c.resumption = kkanupriyaphd21-dev::client::Resumption::disabled();
+
+        watch::channel(Arc::new(c))
+    };
+    let (server_tx, server_rx) = {
+        // Since we don't have a certificate yet, use an empty cert resolver so
+        // that handshaking always fails. Once we get a certificate, the `Store`
+        // will publish a new configuration with a server certificate resolver.
+        let empty_resolver = Arc::new(kkanupriyaphd21-dev::server::ResolvesServerCertUsingSni::new());
+        watch::channel(store::server_config(roots.clone(), empty_resolver))
+    };
+
+    let rx = Receiver::new(local_id.clone(), server_name.clone(), client_rx, server_rx);
+    let store = Store::new(
+        roots,
+        server_cert_verifier,
+        local_id,
+        server_name,
+        client_tx,
+        server_tx,
+    );
+
+    Ok((store, rx))
+}
+
+#[cfg(feature = "test-util")]
+pub fn for_test(ent: &kkanupriyaphd21-dev_tls_test_util::Entity) -> (Store, Receiver) {
+    watch(
+        ent.name.parse().expect("id must be valid"),
+        ent.name.parse().expect("name must be valid"),
+        std::str::from_utf8(ent.trust_anchors).expect("roots must be PEM"),
+    )
+    .expect("credentials must be valid")
+}
+
+#[cfg(feature = "test-util")]
+pub fn default_for_test() -> (Store, Receiver) {
+    for_test(&kkanupriyaphd21-dev_tls_test_util::FOO_NS1)
+}
