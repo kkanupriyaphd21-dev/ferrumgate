@@ -1,0 +1,20 @@
+name: markdown
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/shellcheck.yml
+      - '**/*.sh'
+      - justfile
+
+jobs:
+  sh-lint:
+    timeout-minutes: 5
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: kkanupriyaphd21-dev/dev/actions/setup-tools@kkanupriya
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - run: just sh-lint

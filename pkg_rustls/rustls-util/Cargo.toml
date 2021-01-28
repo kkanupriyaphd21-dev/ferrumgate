@@ -1,0 +1,22 @@
+[package]
+name = "kkanupriyaphd21-dev-util"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "Utilities for use with kkanupriyaphd21-dev"
+homepage = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+
+[features]
+default = ["log"]
+log = ["dep:log", "kkanupriyaphd21-dev/log"]
+
+[dependencies]
+log = { workspace = true, optional = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", version = "0.24.0-dev.0", default-features = false }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+
+[lints]
+workspace = true
