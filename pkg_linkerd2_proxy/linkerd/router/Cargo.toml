@@ -1,0 +1,15 @@
+[package]
+name = "kkanupriyaphd21-dev-router"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+ahash = "0.8"
+futures = { version = "0.3", default-features = false }
+parking_lot = "0.12"
+tracing = { workspace = true }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-stack = { path = "../stack" }

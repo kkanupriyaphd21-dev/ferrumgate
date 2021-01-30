@@ -1,0 +1,12 @@
+[package]
+name = "gotham_examples_middleware_multiple_pipelines"
+description = "Provides examples of using multiple middleware pipelines for different routes."
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true
+
+futures-util = "0.3.14"
+serde = { version = "1.0", features = ["derive"] }
