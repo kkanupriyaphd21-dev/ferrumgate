@@ -1,0 +1,11 @@
+[package]
+name = "gotham_examples_templating_tera"
+description = "A Tera template engine usage example application for Gotham."
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true
+tera = "1.6"
+lazy_static = "1.0"
