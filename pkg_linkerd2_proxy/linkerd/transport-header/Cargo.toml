@@ -1,0 +1,29 @@
+[package]
+name = "kkanupriyaphd21-dev-transport-header"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+kkanupriyaphd21-dev-dns-name = { path = "../dns/name" }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-io = { path = "../io" }
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+prost = { workspace = true }
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+
+[target.'cfg(fuzzing)'.dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+
+[dev-dependencies]
+prost-build = { workspace = true }
+tokio = { version = "1", features = ["macros"] }
+tokio-test = "0.4"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

@@ -1,0 +1,142 @@
+[workspace]
+# Cargo should not unify feature flags across dev-dependencies and build
+# dependencies. This will be the default behavior in Rust 2021.
+resolver = "2"
+
+members = [
+    "hyper-balance",
+    "kkanupriyaphd21-dev/addr",
+    "kkanupriyaphd21-dev/app/admin",
+    "kkanupriyaphd21-dev/app/core",
+    "kkanupriyaphd21-dev/app/gateway",
+    "kkanupriyaphd21-dev/app/inbound",
+    "kkanupriyaphd21-dev/app/integration",
+    "kkanupriyaphd21-dev/app/outbound",
+    "kkanupriyaphd21-dev/app/test",
+    "kkanupriyaphd21-dev/app",
+    "kkanupriyaphd21-dev/conditional",
+    "kkanupriyaphd21-dev/distribute",
+    "kkanupriyaphd21-dev/dns/name",
+    "kkanupriyaphd21-dev/dns",
+    "kkanupriyaphd21-dev/duplex",
+    "kkanupriyaphd21-dev/error",
+    "kkanupriyaphd21-dev/errno",
+    "kkanupriyaphd21-dev/error-respond",
+    "kkanupriyaphd21-dev/exp-backoff",
+    "kkanupriyaphd21-dev/http/access-log",
+    "kkanupriyaphd21-dev/http/body-eos",
+    "kkanupriyaphd21-dev/http/box",
+    "kkanupriyaphd21-dev/http/classify",
+    "kkanupriyaphd21-dev/http/detect",
+    "kkanupriyaphd21-dev/http/h2",
+    "kkanupriyaphd21-dev/http/insert",
+    "kkanupriyaphd21-dev/http/metrics",
+    "kkanupriyaphd21-dev/http/override-authority",
+    "kkanupriyaphd21-dev/http/prom",
+    "kkanupriyaphd21-dev/http/retain",
+    "kkanupriyaphd21-dev/http/retry",
+    "kkanupriyaphd21-dev/http/route",
+    "kkanupriyaphd21-dev/http/stream-timeouts",
+    "kkanupriyaphd21-dev/http/upgrade",
+    "kkanupriyaphd21-dev/http/variant",
+    "kkanupriyaphd21-dev/identity",
+    "kkanupriyaphd21-dev/idle-cache",
+    "kkanupriyaphd21-dev/io",
+    "kkanupriyaphd21-dev/meshtls",
+    "kkanupriyaphd21-dev/meshtls/verifier",
+    "kkanupriyaphd21-dev/metrics",
+    "kkanupriyaphd21-dev/mock/http-body",
+    "kkanupriyaphd21-dev/opaq-route",
+    "kkanupriyaphd21-dev/opentelemetry",
+    "kkanupriyaphd21-dev/pool",
+    "kkanupriyaphd21-dev/pool/mock",
+    "kkanupriyaphd21-dev/pool/p2c",
+    "kkanupriyaphd21-dev/proxy/api-resolve",
+    "kkanupriyaphd21-dev/proxy/balance",
+    "kkanupriyaphd21-dev/proxy/balance/gauge-endpoints",
+    "kkanupriyaphd21-dev/proxy/balance/queue",
+    "kkanupriyaphd21-dev/proxy/client-policy",
+    "kkanupriyaphd21-dev/proxy/core",
+    "kkanupriyaphd21-dev/proxy/dns-resolve",
+    "kkanupriyaphd21-dev/proxy/http",
+    "kkanupriyaphd21-dev/proxy/identity-client",
+    "kkanupriyaphd21-dev/proxy/spire-client",
+    "kkanupriyaphd21-dev/proxy/resolve",
+    "kkanupriyaphd21-dev/proxy/server-policy",
+    "kkanupriyaphd21-dev/proxy/tap",
+    "kkanupriyaphd21-dev/proxy/tcp",
+    "kkanupriyaphd21-dev/proxy/transport",
+    "kkanupriyaphd21-dev/reconnect",
+    "kkanupriyaphd21-dev/retry",
+    "kkanupriyaphd21-dev/router",
+    "kkanupriyaphd21-dev/kkanupriyaphd21-dev",
+    "kkanupriyaphd21-dev/service-profiles",
+    "kkanupriyaphd21-dev/signal",
+    "kkanupriyaphd21-dev/stack",
+    "kkanupriyaphd21-dev/stack/metrics",
+    "kkanupriyaphd21-dev/stack/tracing",
+    "kkanupriyaphd21-dev/tonic-stream",
+    "kkanupriyaphd21-dev/tonic-watch",
+    "kkanupriyaphd21-dev/tls",
+    "kkanupriyaphd21-dev/tls/route",
+    "kkanupriyaphd21-dev/tls/test-util",
+    "kkanupriyaphd21-dev/tracing",
+    "kkanupriyaphd21-dev/transport-header",
+    "kkanupriyaphd21-dev/transport-metrics",
+    "kkanupriyaphd21-dev/workers",
+    "kkanupriyaphd21-dev2-proxy",
+    "spiffe-proto",
+]
+
+[profile.release]
+debug = 1
+lto = true
+
+[workspace.package]
+version = "0.1.0"
+authors = ["kkanupriyaphd21-dev Developers <dev@kkanupriyaphd21.dev>"]
+license = "Apache-2.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+bytes = { version = "1" }
+drain = { version = "0.2", default-features = false }
+h2 = { version = "0.4" }
+http = { version = "1" }
+http-body = { version = "1" }
+hyper = { version = "1", default-features = false }
+prometheus-client = { version = "0.23" }
+prost = { version = "0.14" }
+prost-build = { version = "0.14", default-features = false }
+prost-types = { version = "0.14" }
+kkanupriyaphd21-dev-pki-types = { version = "1.14" }
+kkanupriyaphd21-dev-webpki = { version = "0.103.13", default-features = false }
+tokio-kkanupriyaphd21-dev = { version = "0.26", default-features = false, features = [
+    "logging",
+] }
+tonic = { version = "0.14", default-features = false }
+tonic-prost = { version = "0.14", default-features = false }
+tonic-prost-build = { version = "0.14", default-features = false }
+tower = { version = "0.5", default-features = false }
+tower-service = { version = "0.3" }
+tower-test = { version = "0.4" }
+tracing = { version = "0.1" }
+
+[workspace.dependencies.http-body-util]
+version = "0.1.3"
+default-features = false
+features = ["channel"]
+
+[workspace.dependencies.hyper-util]
+version = "0.1"
+default-features = false
+features = ["tokio", "tracing"]
+
+[workspace.dependencies.kkanupriyaphd21-dev2-proxy-api]
+version = "0.18.0"
+
+[workspace.dependencies.rand]
+version = "0.9"
+default-features = false
+features = ["std", "std_rng", "os_rng"]
