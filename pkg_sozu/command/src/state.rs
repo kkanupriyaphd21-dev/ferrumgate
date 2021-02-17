@@ -1,0 +1,3426 @@
+use std::{
+    collections::{
+        BTreeMap, BTreeSet, HashMap, HashSet, btree_map::Entry as BTreeMapEntry,
+        hash_map::DefaultHasher,
+    },
+    fs::File,
+    hash::{Hash, Hasher},
+    io::Write,
+    iter::repeat,
+    net::SocketAddr,
+};
+
+use prost::{Message, UnknownEnumValue};
+
+use crate::{
+    ObjectKind,
+    certificate::{CertificateError, Fingerprint, calculate_fingerprint},
+    proto::{
+        command::{
+            ActivateListener, AddBackend, AddCertificate, CertificateAndKey, Cluster,
+            ClusterInformation, CustomHttpAnswers, DeactivateListener, FrontendFilters,
+            HealthChecksList, HttpListenerConfig, HttpsListenerConfig, InitialState,
+            ListedFrontends, ListenerType, ListenersList, PathRule, QueryCertificatesFilters,
+            RemoveBackend, RemoveCertificate, RemoveListener, ReplaceCertificate, Request,
+            RequestCounts, RequestHttpFrontend, RequestTcpFrontend, SetHealthCheck, SocketAddress,
+            TcpListenerConfig, UpdateHttpListenerConfig, UpdateHttpsListenerConfig,
+            UpdateTcpListenerConfig, WorkerRequest, request::RequestType,
+        },
+        display::format_request_type,
+    },
+    response::{Backend, HttpFrontend, TcpFrontend},
+};
+
+/// To use throughout Sōzu
+pub type ClusterId = String;
+
+#[derive(thiserror::Error, Debug)]
+pub enum StateError {
+    #[error("Request came in empty")]
+    EmptyRequest,
+    #[error("dispatching this request did not bring any change to the state")]
+    NoChange,
+    #[error("State can not handle this request")]
+    UndispatchableRequest,
+    #[error("Did not find {kind:?} with address or id '{id}'")]
+    NotFound { kind: ObjectKind, id: String },
+    #[error("{kind:?} '{id}' already exists")]
+    Exists { kind: ObjectKind, id: String },
+    #[error("Wrong field value: {0}")]
+    WrongFieldValue(UnknownEnumValue),
+    #[error("Could not add certificate: {0}")]
+    AddCertificate(CertificateError),
+    #[error("Could not remove certificate: {0}")]
+    RemoveCertificate(String),
+    #[error("Could not replace certificate: {0}")]
+    ReplaceCertificate(String),
+    #[error(
+        "Could not convert the frontend to an insertable one. Frontend: {frontend} error: {error}"
+    )]
+    FrontendConversion { frontend: String, error: String },
+    #[error("Could not write state to file: {0}")]
+    FileError(std::io::Error),
+    #[error("Invalid value for field '{field}': {reason}")]
+    InvalidValue {
+        field: &'static str,
+        reason: &'static str,
+    },
+}
+
+/// The `ConfigState` represents the state of Sōzu's business, which is to forward traffic
+/// from frontends to backends. Hence, it contains all details about:
+///
+/// - listeners (socket addresses, for TCP and HTTP connections)
+/// - frontends (bind to a listener)
+/// - backends (to forward connections to)
+/// - clusters (routing rules from frontends to backends)
+/// - TLS certificates
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigState {
+    pub clusters: BTreeMap<ClusterId, Cluster>,
+    pub backends: BTreeMap<ClusterId, Vec<Backend>>,
+    /// socket address -> HTTP listener
+    pub http_listeners: BTreeMap<SocketAddr, HttpListenerConfig>,
+    /// socket address -> HTTPS listener
+    pub https_listeners: BTreeMap<SocketAddr, HttpsListenerConfig>,
+    /// socket address -> TCP listener
+    pub tcp_listeners: BTreeMap<SocketAddr, TcpListenerConfig>,
+    /// HTTP frontends, indexed by a summary of each front's address;hostname;path, for uniqueness.
+    /// For example: `"0.0.0.0:8080;lolcatho.st;P/api"`
+    pub http_fronts: BTreeMap<String, HttpFrontend>,
+    /// indexed by (address, hostname, path)
+    pub https_fronts: BTreeMap<String, HttpFrontend>,
+    pub tcp_fronts: HashMap<ClusterId, Vec<TcpFrontend>>,
+    pub certificates: HashMap<SocketAddr, HashMap<Fingerprint, CertificateAndKey>>,
+    /// A census of requests that were received. Name of the request -> number of occurences
+    pub request_counts: BTreeMap<String, i32>,
+}
+
+impl ConfigState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn dispatch(&mut self, request: &Request) -> Result<(), StateError> {
+        let request_type = match &request.request_type {
+            Some(t) => t,
+            None => return Err(StateError::EmptyRequest),
+        };
+
+        self.increment_request_count(request);
+
+        match request_type {
+            RequestType::AddCluster(cluster) => self.add_cluster(cluster),
+            RequestType::RemoveCluster(cluster_id) => self.remove_cluster(cluster_id),
+            RequestType::AddHttpListener(listener) => self.add_http_listener(listener),
+            RequestType::AddHttpsListener(listener) => self.add_https_listener(listener),
+            RequestType::AddTcpListener(listener) => self.add_tcp_listener(listener),
+            RequestType::RemoveListener(remove) => self.remove_listener(remove),
+            RequestType::ActivateListener(activate) => self.activate_listener(activate),
+            RequestType::DeactivateListener(deactivate) => self.deactivate_listener(deactivate),
+            RequestType::AddHttpFrontend(front) => self.add_http_frontend(front),
+            RequestType::RemoveHttpFrontend(front) => self.remove_http_frontend(front),
+            RequestType::AddCertificate(add) => self.add_certificate(add),
+            RequestType::RemoveCertificate(remove) => self.remove_certificate(remove),
+            RequestType::ReplaceCertificate(replace) => self.replace_certificate(replace),
+            RequestType::AddHttpsFrontend(front) => self.add_https_frontend(front),
+            RequestType::RemoveHttpsFrontend(front) => self.remove_https_frontend(front),
+            RequestType::AddTcpFrontend(front) => self.add_tcp_frontend(front),
+            RequestType::RemoveTcpFrontend(front) => self.remove_tcp_frontend(front),
+            RequestType::AddBackend(add_backend) => self.add_backend(add_backend),
+            RequestType::RemoveBackend(backend) => self.remove_backend(backend),
+            RequestType::UpdateHttpListener(patch) => self.update_http_listener(patch),
+            RequestType::UpdateHttpsListener(patch) => self.update_https_listener(patch),
+            RequestType::UpdateTcpListener(patch) => self.update_tcp_listener(patch),
+            RequestType::SetHealthCheck(set) => self.set_health_check(set),
+            RequestType::RemoveHealthCheck(cluster_id) => self.remove_health_check(cluster_id),
+
+            // This is to avoid the error message. These request types are
+            // worker-only / runtime-only and do not affect the persisted
+            // ConfigState (e.g., a worker-side global limit set via
+            // SetMaxConnectionsPerIp does NOT survive a worker restart;
+            // operators must mirror the change in the TOML to make it
+            // sticky).
+            RequestType::Logging(_)
+            | RequestType::CountRequests(_)
+            | RequestType::Status(_)
+            | RequestType::SoftStop(_)
+            | RequestType::QueryCertificatesFromWorkers(_)
+            | RequestType::QueryClusterById(_)
+            | RequestType::QueryClustersByDomain(_)
+            | RequestType::QueryMetrics(_)
+            | RequestType::QueryClustersHashes(_)
+            | RequestType::ConfigureMetrics(_)
+            | RequestType::ReturnListenSockets(_)
+            | RequestType::SetMaxConnectionsPerIp(_)
+            | RequestType::QueryMaxConnectionsPerIp(_)
+            | RequestType::HardStop(_) => Ok(()),
+
+            _other_request => Err(StateError::UndispatchableRequest),
+        }
+    }
+
+    /// Increments the count for this request type
+    fn increment_request_count(&mut self, request: &Request) {
+        if let Some(request_type) = &request.request_type {
+            let count = self
+                .request_counts
+                .entry(format_request_type(request_type).to_owned())
+                .or_insert(1);
+            *count += 1;
+        }
+    }
+
+    pub fn get_request_counts(&self) -> RequestCounts {
+        RequestCounts {
+            map: self.request_counts.clone(),
+        }
+    }
+
+    fn add_cluster(&mut self, cluster: &Cluster) -> Result<(), StateError> {
+        // Validate any inline `cluster.health_check` before mutating state so
+        // an invalid config (zero thresholds, missing leading `/`, CR/LF/NUL/C0
+        // in URI) cannot ride in via the AddCluster path. Without this, TOML
+        // reload, SaveState/LoadState, and direct API AddCluster requests
+        // bypass the SetHealthCheck-side check and let an attacker-controlled
+        // health-check URI smuggle CRLF into outbound HTTP/1.1 probes.
+        if let Some(hc) = cluster.health_check.as_ref() {
+            if let Err(reason) = crate::config::validate_health_check_config(hc) {
+                return Err(StateError::InvalidValue {
+                    field: "health_check",
+                    reason,
+                });
+            }
+        }
+        let cluster = cluster.clone();
+        self.clusters.insert(cluster.cluster_id.clone(), cluster);
+        Ok(())
+    }
+
+    fn remove_cluster(&mut self, cluster_id: &str) -> Result<(), StateError> {
+        match self.clusters.remove(cluster_id) {
+            Some(_) => Ok(()),
+            None => Err(StateError::NotFound {
+                kind: ObjectKind::Cluster,
+                id: cluster_id.to_owned(),
+            }),
+        }
+    }
+
+    fn set_health_check(&mut self, set: &SetHealthCheck) -> Result<(), StateError> {
+        // Validate before mutating state so an invalid config (zero
+        // thresholds, missing leading `/`, CR/LF/NUL/C0 in URI) cannot
+        // round-trip through SaveState/LoadState. The worker also
+        // validates at the SetHealthCheck handler — this is the
+        // master-side mirror so off-channel TOML reload paths don't
+        // bypass the policy.
+        if let Err(reason) = crate::config::validate_health_check_config(&set.config) {
+            return Err(StateError::InvalidValue {
+                field: "health_check",
+                reason,
+            });
+        }
+        match self.clusters.get_mut(&set.cluster_id) {
+            Some(cluster) => {
+                cluster.health_check = Some(set.config.to_owned());
+                Ok(())
+            }
+            None => Err(StateError::NotFound {
+                kind: ObjectKind::Cluster,
+                id: set.cluster_id.to_owned(),
+            }),
+        }
+    }
+
+    fn remove_health_check(&mut self, cluster_id: &str) -> Result<(), StateError> {
+        match self.clusters.get_mut(cluster_id) {
+            Some(cluster) => {
+                cluster.health_check = None;
+                Ok(())
+            }
+            None => Err(StateError::NotFound {
+                kind: ObjectKind::Cluster,
+                id: cluster_id.to_owned(),
+            }),
+        }
+    }
+
+    pub fn list_health_checks(&self, cluster_id: Option<&str>) -> HealthChecksList {
+        let map = self
+            .clusters
+            .iter()
+            .filter(|(id, _)| cluster_id.is_none_or(|filter| filter == id.as_str()))
+            .filter_map(|(id, cluster)| {
+                cluster
+                    .health_check
+                    .as_ref()
+                    .map(|hc| (id.to_owned(), hc.to_owned()))
+            })
+            .collect();
+        HealthChecksList { map }
+    }
+
+    fn add_http_listener(&mut self, listener: &HttpListenerConfig) -> Result<(), StateError> {
+        let address: SocketAddr = listener.address.into();
+        match self.http_listeners.entry(address) {
+            BTreeMapEntry::Vacant(vacant_entry) => vacant_entry.insert(listener.clone()),
+            BTreeMapEntry::Occupied(_) => {
+                return Err(StateError::Exists {
+                    kind: ObjectKind::HttpListener,
+                    id: address.to_string(),
+                });
+            }
+        };
+        Ok(())
+    }
+
+    fn add_https_listener(&mut self, listener: &HttpsListenerConfig) -> Result<(), StateError> {
+        let address: SocketAddr = listener.address.into();
+        match self.https_listeners.entry(address) {
+            BTreeMapEntry::Vacant(vacant_entry) => vacant_entry.insert(listener.clone()),
+            BTreeMapEntry::Occupied(_) => {
+                return Err(StateError::Exists {
+                    kind: ObjectKind::HttpsListener,
+                    id: address.to_string(),
+                });
+            }
+        };
+        Ok(())
+    }
+
+    fn add_tcp_listener(&mut self, listener: &TcpListenerConfig) -> Result<(), StateError> {
+        let address: SocketAddr = listener.address.into();
+        match self.tcp_listeners.entry(address) {
+            BTreeMapEntry::Vacant(vacant_entry) => vacant_entry.insert(*listener),
+            BTreeMapEntry::Occupied(_) => {
+                return Err(StateError::Exists {
+                    kind: ObjectKind::TcpListener,
+                    id: address.to_string(),
+                });
+            }
+        };
+        Ok(())
+    }
+
+    fn remove_listener(&mut self, remove: &RemoveListener) -> Result<(), StateError> {
+        match ListenerType::try_from(remove.proxy).map_err(StateError::WrongFieldValue)? {
+            ListenerType::Http => self.remove_http_listener(&remove.address.into()),
+            ListenerType::Https => self.remove_https_listener(&remove.address.into()),
+            ListenerType::Tcp => self.remove_tcp_listener(&remove.address.into()),
+        }
+    }
+
+    fn remove_http_listener(&mut self, address: &SocketAddr) -> Result<(), StateError> {
+        if self.http_listeners.remove(address).is_none() {
+            return Err(StateError::NoChange);
+        }
+        Ok(())
+    }
+
+    fn remove_https_listener(&mut self, address: &SocketAddr) -> Result<(), StateError> {
+        if self.https_listeners.remove(address).is_none() {
+            return Err(StateError::NoChange);
+        }
+        Ok(())
+    }
+
+    fn remove_tcp_listener(&mut self, address: &SocketAddr) -> Result<(), StateError> {
+        if self.tcp_listeners.remove(address).is_none() {
+            return Err(StateError::NoChange);
+        }
+        Ok(())
+    }
+
+    /// Validate and apply a partial patch to an existing HTTP listener.
+    ///
+    /// Only `Some` fields in the patch are written; `None` fields preserve the
+    /// current value. Returns `StateError::NotFound` if the address is unknown,
+    /// `StateError::InvalidValue` if a flood-knob value is below the required
+    /// minimum.
+    fn update_http_listener(&mut self, patch: &UpdateHttpListenerConfig) -> Result<(), StateError> {
+        validate_h2_flood_knobs_http(patch)?;
+
+        let address: SocketAddr = patch.address.into();
+        let listener =
+            self.http_listeners
+                .get_mut(&address)
+                .ok_or_else(|| StateError::NotFound {
+                    kind: ObjectKind::HttpListener,
+                    id: address.to_string(),
+                })?;
+
+        // Shared session-at-accept / per-connection knobs
+        if let Some(v) = patch.public_address {
+            listener.public_address = Some(v);
+        }
+        if let Some(v) = patch.expect_proxy {
+            listener.expect_proxy = v;
+        }
+        if let Some(ref v) = patch.sticky_name {
+            listener.sticky_name = v.to_owned();
+        }
+        if let Some(v) = patch.front_timeout {
+            listener.front_timeout = v;
+        }
+        if let Some(v) = patch.back_timeout {
+            listener.back_timeout = v;
+        }
+        if let Some(v) = patch.connect_timeout {
+            listener.connect_timeout = v;
+        }
+        if let Some(v) = patch.request_timeout {
+            listener.request_timeout = v;
+        }
+        if let Some(patch_answers) = patch.http_answers.as_ref() {
+            merge_custom_http_answers(&mut listener.http_answers, patch_answers);
+        }
+        // H2 flood knobs
+        if let Some(v) = patch.h2_max_rst_stream_per_window {
+            listener.h2_max_rst_stream_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_ping_per_window {
+            listener.h2_max_ping_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_settings_per_window {
+            listener.h2_max_settings_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_empty_data_per_window {
+            listener.h2_max_empty_data_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_continuation_frames {
+            listener.h2_max_continuation_frames = Some(v);
+        }
+        if let Some(v) = patch.h2_max_glitch_count {
+            listener.h2_max_glitch_count = Some(v);
+        }
+        if let Some(v) = patch.h2_initial_connection_window {
+            listener.h2_initial_connection_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_concurrent_streams {
+            listener.h2_max_concurrent_streams = Some(v);
+        }
+        if let Some(v) = patch.h2_stream_shrink_ratio {
+            listener.h2_stream_shrink_ratio = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_lifetime {
+            listener.h2_max_rst_stream_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_abusive_lifetime {
+            listener.h2_max_rst_stream_abusive_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_emitted_lifetime {
+            listener.h2_max_rst_stream_emitted_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_header_list_size {
+            listener.h2_max_header_list_size = Some(v);
+        }
+        if let Some(v) = patch.h2_max_header_table_size {
+            listener.h2_max_header_table_size = Some(v);
+        }
+        if let Some(v) = patch.h2_stream_idle_timeout_seconds {
+            listener.h2_stream_idle_timeout_seconds = Some(v);
+        }
+        // 0 is valid for graceful_shutdown_deadline (means "wait forever")
+        if let Some(v) = patch.h2_graceful_shutdown_deadline_seconds {
+            listener.h2_graceful_shutdown_deadline_seconds = Some(v);
+        }
+        if let Some(v) = patch.h2_max_window_update_stream0_per_window {
+            listener.h2_max_window_update_stream0_per_window = Some(v);
+        }
+        if let Some(ref v) = patch.sozu_id_header {
+            validate_sozu_id_header(v)?;
+            listener.sozu_id_header = Some(v.to_owned());
+        }
+        Ok(())
+    }
+
+    /// Validate and apply a partial patch to an existing HTTPS listener.
+    ///
+    /// Only `Some` fields in the patch are written; `None` fields preserve the
+    /// current value. Returns `StateError::NotFound` if the address is unknown,
+    /// `StateError::InvalidValue` if a flood-knob value is below the required
+    /// minimum or an ALPN value is unknown.
+    fn update_https_listener(
+        &mut self,
+        patch: &UpdateHttpsListenerConfig,
+    ) -> Result<(), StateError> {
+        validate_h2_flood_knobs_https(patch)?;
+
+        let address: SocketAddr = patch.address.into();
+        let listener =
+            self.https_listeners
+                .get_mut(&address)
+                .ok_or_else(|| StateError::NotFound {
+                    kind: ObjectKind::HttpsListener,
+                    id: address.to_string(),
+                })?;
+
+        // Shared session-at-accept / per-connection knobs
+        if let Some(v) = patch.public_address {
+            listener.public_address = Some(v);
+        }
+        if let Some(v) = patch.expect_proxy {
+            listener.expect_proxy = v;
+        }
+        if let Some(ref v) = patch.sticky_name {
+            listener.sticky_name = v.to_owned();
+        }
+        if let Some(v) = patch.front_timeout {
+            listener.front_timeout = v;
+        }
+        if let Some(v) = patch.back_timeout {
+            listener.back_timeout = v;
+        }
+        if let Some(v) = patch.connect_timeout {
+            listener.connect_timeout = v;
+        }
+        if let Some(v) = patch.request_timeout {
+            listener.request_timeout = v;
+        }
+        if let Some(patch_answers) = patch.http_answers.as_ref() {
+            merge_custom_http_answers(&mut listener.http_answers, patch_answers);
+        }
+        // HTTPS-only knobs
+        if let Some(ref alpn_wrapper) = patch.alpn_protocols {
+            validate_alpn_protocols(&alpn_wrapper.values)?;
+            // Empty values vec = reset to default (runtime treats empty as default)
+            listener.alpn_protocols = alpn_wrapper.values.clone();
+        }
+        if let Some(v) = patch.strict_sni_binding {
+            listener.strict_sni_binding = Some(v);
+        }
+        if let Some(v) = patch.disable_http11 {
+            listener.disable_http11 = Some(v);
+        }
+        // H2 flood knobs
+        if let Some(v) = patch.h2_max_rst_stream_per_window {
+            listener.h2_max_rst_stream_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_ping_per_window {
+            listener.h2_max_ping_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_settings_per_window {
+            listener.h2_max_settings_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_empty_data_per_window {
+            listener.h2_max_empty_data_per_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_continuation_frames {
+            listener.h2_max_continuation_frames = Some(v);
+        }
+        if let Some(v) = patch.h2_max_glitch_count {
+            listener.h2_max_glitch_count = Some(v);
+        }
+        if let Some(v) = patch.h2_initial_connection_window {
+            listener.h2_initial_connection_window = Some(v);
+        }
+        if let Some(v) = patch.h2_max_concurrent_streams {
+            listener.h2_max_concurrent_streams = Some(v);
+        }
+        if let Some(v) = patch.h2_stream_shrink_ratio {
+            listener.h2_stream_shrink_ratio = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_lifetime {
+            listener.h2_max_rst_stream_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_abusive_lifetime {
+            listener.h2_max_rst_stream_abusive_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_rst_stream_emitted_lifetime {
+            listener.h2_max_rst_stream_emitted_lifetime = Some(v);
+        }
+        if let Some(v) = patch.h2_max_header_list_size {
+            listener.h2_max_header_list_size = Some(v);
+        }
+        if let Some(v) = patch.h2_max_header_table_size {
+            listener.h2_max_header_table_size = Some(v);
+        }
+        if let Some(v) = patch.h2_stream_idle_timeout_seconds {
+            listener.h2_stream_idle_timeout_seconds = Some(v);
+        }
+        // 0 is valid for graceful_shutdown_deadline (means "wait forever")
+        if let Some(v) = patch.h2_graceful_shutdown_deadline_seconds {
+            listener.h2_graceful_shutdown_deadline_seconds = Some(v);
+        }
+        if let Some(v) = patch.h2_max_window_update_stream0_per_window {
+            listener.h2_max_window_update_stream0_per_window = Some(v);
+        }
+        if let Some(ref v) = patch.sozu_id_header {
+            validate_sozu_id_header(v)?;
+            listener.sozu_id_header = Some(v.to_owned());
+        }
+        Ok(())
+    }
+
+    /// Validate and apply a partial patch to an existing TCP listener.
+    ///
+    /// Only `Some` fields in the patch are written; `None` fields preserve the
+    /// current value. Returns `StateError::NotFound` if the address is unknown.
+    fn update_tcp_listener(&mut self, patch: &UpdateTcpListenerConfig) -> Result<(), StateError> {
+        let address: SocketAddr = patch.address.into();
+        let listener =
+            self.tcp_listeners
+                .get_mut(&address)
+                .ok_or_else(|| StateError::NotFound {
+                    kind: ObjectKind::TcpListener,
+                    id: address.to_string(),
+                })?;
+
+        if let Some(v) = patch.public_address {
+            listener.public_address = Some(v);
+        }
+        if let Some(v) = patch.expect_proxy {
+            listener.expect_proxy = v;
+        }
+        if let Some(v) = patch.front_timeout {
+            listener.front_timeout = v;
+        }
+        if let Some(v) = patch.back_timeout {
+            listener.back_timeout = v;
+        }
+        if let Some(v) = patch.connect_timeout {
+            listener.connect_timeout = v;
+        }
+        Ok(())
+    }
+
+    fn activate_listener(&mut self, activate: &ActivateListener) -> Result<(), StateError> {
+        match ListenerType::try_from(activate.proxy).map_err(StateError::WrongFieldValue)? {
+            ListenerType::Http => self
+                .http_listeners
+                .get_mut(&activate.address.into())
+                .map(|listener| listener.active = true)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::HttpListener,
+                    id: activate.address.to_string(),
+                }),
+            ListenerType::Https => self
+                .https_listeners
+                .get_mut(&activate.address.into())
+                .map(|listener| listener.active = true)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::HttpsListener,
+                    id: activate.address.to_string(),
+                }),
+            ListenerType::Tcp => self
+                .tcp_listeners
+                .get_mut(&activate.address.into())
+                .map(|listener| listener.active = true)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::TcpListener,
+                    id: activate.address.to_string(),
+                }),
+        }
+    }
+
+    fn deactivate_listener(&mut self, deactivate: &DeactivateListener) -> Result<(), StateError> {
+        match ListenerType::try_from(deactivate.proxy).map_err(StateError::WrongFieldValue)? {
+            ListenerType::Http => self
+                .http_listeners
+                .get_mut(&deactivate.address.into())
+                .map(|listener| listener.active = false)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::HttpListener,
+                    id: deactivate.address.to_string(),
+                }),
+            ListenerType::Https => self
+                .https_listeners
+                .get_mut(&deactivate.address.into())
+                .map(|listener| listener.active = false)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::HttpsListener,
+                    id: deactivate.address.to_string(),
+                }),
+            ListenerType::Tcp => self
+                .tcp_listeners
+                .get_mut(&deactivate.address.into())
+                .map(|listener| listener.active = false)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::TcpListener,
+                    id: deactivate.address.to_string(),
+                }),
+        }
+    }
+
+    fn add_http_frontend(&mut self, front: &RequestHttpFrontend) -> Result<(), StateError> {
+        let front_as_key = front.to_string();
+
+        match self.http_fronts.entry(front.to_string()) {
+            BTreeMapEntry::Vacant(e) => {
+                e.insert(front.clone().to_frontend().map_err(|into_error| {
+                    StateError::FrontendConversion {
+                        frontend: front_as_key,
+                        error: into_error.to_string(),
+                    }
+                })?)
+            }
+            BTreeMapEntry::Occupied(_) => {
+                return Err(StateError::Exists {
+                    kind: ObjectKind::HttpFrontend,
+                    id: front.to_string(),
+                });
+            }
+        };
+        Ok(())
+    }
+
+    fn add_https_frontend(&mut self, front: &RequestHttpFrontend) -> Result<(), StateError> {
+        let front_as_key = front.to_string();
+
+        match self.https_fronts.entry(front.to_string()) {
+            BTreeMapEntry::Vacant(e) => {
+                e.insert(front.clone().to_frontend().map_err(|into_error| {
+                    StateError::FrontendConversion {
+                        frontend: front_as_key,
+                        error: into_error.to_string(),
+                    }
+                })?)
+            }
+            BTreeMapEntry::Occupied(_) => {
+                return Err(StateError::Exists {
+                    kind: ObjectKind::HttpsFrontend,
+                    id: front.to_string(),
+                });
+            }
+        };
+        Ok(())
+    }
+
+    fn remove_http_frontend(&mut self, front: &RequestHttpFrontend) -> Result<(), StateError> {
+        self.http_fronts
+            .remove(&front.to_string())
+            .ok_or(StateError::NotFound {
+                kind: ObjectKind::HttpFrontend,
+                id: front.to_string(),
+            })?;
+        Ok(())
+    }
+
+    fn remove_https_frontend(&mut self, front: &RequestHttpFrontend) -> Result<(), StateError> {
+        self.https_fronts
+            .remove(&front.to_string())
+            .ok_or(StateError::NotFound {
+                kind: ObjectKind::HttpsFrontend,
+                id: front.to_string(),
+            })?;
+        Ok(())
+    }
+
+    fn add_certificate(&mut self, add: &AddCertificate) -> Result<(), StateError> {
+        let fingerprint = add
+            .certificate
+            .fingerprint()
+            .map_err(StateError::AddCertificate)?;
+
+        let entry = self.certificates.entry(add.address.into()).or_default();
+
+        let mut add = add.clone();
+        add.certificate
+            .apply_overriding_names()
+            .map_err(StateError::AddCertificate)?;
+
+        if entry.contains_key(&fingerprint) {
+            info!(
+                "Skip loading of certificate '{}' for domain '{}' on listener '{}', the certificate is already present.",
+                fingerprint,
+                add.certificate.names.join(", "),
+                add.address
+            );
+            return Ok(());
+        }
+
+        entry.insert(fingerprint, add.certificate);
+        Ok(())
+    }
+
+    fn remove_certificate(&mut self, remove: &RemoveCertificate) -> Result<(), StateError> {
+        let fingerprint = Fingerprint(
+            hex::decode(&remove.fingerprint)
+                .map_err(|decode_error| StateError::RemoveCertificate(decode_error.to_string()))?,
+        );
+
+        if let Some(index) = self.certificates.get_mut(&remove.address.into()) {
+            index.remove(&fingerprint);
+        }
+
+        Ok(())
+    }
+
+    /// - Remove old certificate from certificates, using the old fingerprint
+    /// - calculate the new fingerprint
+    /// - insert the new certificate with the new fingerprint as key
+    /// - check that the new entry is present in the certificates hashmap
+    fn replace_certificate(&mut self, replace: &ReplaceCertificate) -> Result<(), StateError> {
+        let replace_address = replace.address.into();
+        let old_fingerprint = Fingerprint(
+            hex::decode(&replace.old_fingerprint)
+                .map_err(|decode_error| StateError::RemoveCertificate(decode_error.to_string()))?,
+        );
+
+        self.certificates
+            .get_mut(&replace_address)
+            .ok_or(StateError::NotFound {
+                kind: ObjectKind::Certificate,
+                id: replace.address.to_string(),
+            })?
+            .remove(&old_fingerprint);
+
+        let new_fingerprint = Fingerprint(
+            calculate_fingerprint(replace.new_certificate.certificate.as_bytes()).map_err(
+                |fingerprint_err| StateError::ReplaceCertificate(fingerprint_err.to_string()),
+            )?,
+        );
+
+        self.certificates
+            .get_mut(&replace_address)
+            .map(|certs| certs.insert(new_fingerprint.clone(), replace.new_certificate.clone()));
+
+        if !self
+            .certificates
+            .get(&replace_address)
+            .ok_or(StateError::ReplaceCertificate(
+                "Unlikely error. This entry in the certificate hashmap should be present"
+                    .to_string(),
+            ))?
+            .contains_key(&new_fingerprint)
+        {
+            return Err(StateError::ReplaceCertificate(format!(
+                "Failed to insert the new certificate for address {}",
+                replace.address
+            )));
+        }
+        Ok(())
+    }
+
+    fn add_tcp_frontend(&mut self, front: &RequestTcpFrontend) -> Result<(), StateError> {
+        let tcp_frontends = self.tcp_fronts.entry(front.cluster_id.clone()).or_default();
+
+        let tcp_frontend = TcpFrontend {
+            cluster_id: front.cluster_id.clone(),
+            address: front.address.into(),
+            tags: front.tags.clone(),
+        };
+        if tcp_frontends.contains(&tcp_frontend) {
+            return Err(StateError::Exists {
+                kind: ObjectKind::TcpFrontend,
+                id: format!("{tcp_frontend:?}"),
+            });
+        }
+
+        tcp_frontends.push(tcp_frontend);
+        Ok(())
+    }
+
+    fn remove_tcp_frontend(
+        &mut self,
+        front_to_remove: &RequestTcpFrontend,
+    ) -> Result<(), StateError> {
+        let tcp_frontends =
+            self.tcp_fronts
+                .get_mut(&front_to_remove.cluster_id)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::TcpFrontend,
+                    id: format!("{front_to_remove:?}"),
+                })?;
+
+        let len = tcp_frontends.len();
+        tcp_frontends.retain(|front| front.address != front_to_remove.address.into());
+        if tcp_frontends.len() == len {
+            return Err(StateError::NoChange);
+        }
+        Ok(())
+    }
+
+    fn add_backend(&mut self, add_backend: &AddBackend) -> Result<(), StateError> {
+        let backend = Backend {
+            address: add_backend.address.into(),
+            cluster_id: add_backend.cluster_id.clone(),
+            backend_id: add_backend.backend_id.clone(),
+            sticky_id: add_backend.sticky_id.clone(),
+            load_balancing_parameters: add_backend.load_balancing_parameters,
+            backup: add_backend.backup,
+        };
+        let backends = self.backends.entry(backend.cluster_id.clone()).or_default();
+
+        // we might be modifying the sticky id or load balancing parameters
+        backends.retain(|b| b.backend_id != backend.backend_id || b.address != backend.address);
+        backends.push(backend);
+        backends.sort();
+
+        Ok(())
+    }
+
+    fn remove_backend(&mut self, backend: &RemoveBackend) -> Result<(), StateError> {
+        let backend_list =
+            self.backends
+                .get_mut(&backend.cluster_id)
+                .ok_or(StateError::NotFound {
+                    kind: ObjectKind::Backend,
+                    id: backend.backend_id.to_owned(),
+                })?;
+
+        let len = backend_list.len();
+        let remove_address = backend.address.into();
+        backend_list.retain(|b| b.backend_id != backend.backend_id || b.address != remove_address);
+        backend_list.sort();
+        if backend_list.len() == len {
+            return Err(StateError::NoChange);
+        }
+        Ok(())
+    }
+
+    /// creates all requests needed to bootstrap the state
+    fn generate_requests(&self) -> Vec<Request> {
+        let mut v: Vec<Request> = Vec::new();
+
+        for listener in self.http_listeners.values() {
+            v.push(RequestType::AddHttpListener(listener.clone()).into());
+            if listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: listener.address,
+                        proxy: ListenerType::Http.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for listener in self.https_listeners.values() {
+            v.push(RequestType::AddHttpsListener(listener.clone()).into());
+            if listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: listener.address,
+                        proxy: ListenerType::Https.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for listener in self.tcp_listeners.values() {
+            v.push(RequestType::AddTcpListener(*listener).into());
+            if listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: listener.address,
+                        proxy: ListenerType::Tcp.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for cluster in self.clusters.values() {
+            v.push(RequestType::AddCluster(cluster.clone()).into());
+        }
+
+        for front in self.http_fronts.values() {
+            v.push(RequestType::AddHttpFrontend(front.clone().into()).into());
+        }
+
+        for (front, certs) in self.certificates.iter() {
+            for certificate_and_key in certs.values() {
+                v.push(
+                    RequestType::AddCertificate(AddCertificate {
+                        address: SocketAddress::from(*front),
+                        certificate: certificate_and_key.clone(),
+                        expired_at: None,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for front in self.https_fronts.values() {
+            v.push(RequestType::AddHttpsFrontend(front.clone().into()).into());
+        }
+
+        for front_list in self.tcp_fronts.values() {
+            for front in front_list {
+                v.push(RequestType::AddTcpFrontend(front.clone().into()).into());
+            }
+        }
+
+        for backend_list in self.backends.values() {
+            for backend in backend_list {
+                v.push(RequestType::AddBackend(backend.clone().to_add_backend()).into());
+            }
+        }
+
+        v
+    }
+
+    pub fn generate_activate_requests(&self) -> Vec<Request> {
+        let mut v: Vec<Request> = Vec::new();
+        for front in self
+            .http_listeners
+            .iter()
+            .filter(|(_, listener)| listener.active)
+            .map(|(k, _)| k)
+        {
+            v.push(
+                RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::from(*front),
+                    proxy: ListenerType::Http.into(),
+                    from_scm: false,
+                })
+                .into(),
+            );
+        }
+
+        for front in self
+            .https_listeners
+            .iter()
+            .filter(|(_, listener)| listener.active)
+            .map(|(k, _)| k)
+        {
+            v.push(
+                RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::from(*front),
+                    proxy: ListenerType::Https.into(),
+                    from_scm: false,
+                })
+                .into(),
+            );
+        }
+        for front in self
+            .tcp_listeners
+            .iter()
+            .filter(|(_, listener)| listener.active)
+            .map(|(k, _)| k)
+        {
+            v.push(
+                RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::from(*front),
+                    proxy: ListenerType::Tcp.into(),
+                    from_scm: false,
+                })
+                .into(),
+            );
+        }
+
+        v
+    }
+
+    pub fn diff(&self, other: &ConfigState) -> Vec<Request> {
+        //pub tcp_listeners:   HashMap<SocketAddr, (TcpListener, bool)>,
+        let my_tcp_listeners: HashSet<&SocketAddr> = self.tcp_listeners.keys().collect();
+        let their_tcp_listeners: HashSet<&SocketAddr> = other.tcp_listeners.keys().collect();
+        let removed_tcp_listeners = my_tcp_listeners.difference(&their_tcp_listeners);
+        let added_tcp_listeners = their_tcp_listeners.difference(&my_tcp_listeners);
+
+        let my_http_listeners: HashSet<&SocketAddr> = self.http_listeners.keys().collect();
+        let their_http_listeners: HashSet<&SocketAddr> = other.http_listeners.keys().collect();
+        let removed_http_listeners = my_http_listeners.difference(&their_http_listeners);
+        let added_http_listeners = their_http_listeners.difference(&my_http_listeners);
+
+        let my_https_listeners: HashSet<&SocketAddr> = self.https_listeners.keys().collect();
+        let their_https_listeners: HashSet<&SocketAddr> = other.https_listeners.keys().collect();
+        let removed_https_listeners = my_https_listeners.difference(&their_https_listeners);
+        let added_https_listeners = their_https_listeners.difference(&my_https_listeners);
+
+        let mut v: Vec<Request> = vec![];
+
+        for address in removed_tcp_listeners {
+            if self.tcp_listeners[*address].active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Tcp.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            v.push(
+                RequestType::RemoveListener(RemoveListener {
+                    address: SocketAddress::from(**address),
+                    proxy: ListenerType::Tcp.into(),
+                })
+                .into(),
+            );
+        }
+
+        for address in added_tcp_listeners.clone() {
+            v.push(RequestType::AddTcpListener(other.tcp_listeners[*address]).into());
+
+            if other.tcp_listeners[*address].active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Tcp.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for address in removed_http_listeners {
+            if self.http_listeners[*address].active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Http.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            v.push(
+                RequestType::RemoveListener(RemoveListener {
+                    address: SocketAddress::from(**address),
+                    proxy: ListenerType::Http.into(),
+                })
+                .into(),
+            );
+        }
+
+        for address in added_http_listeners.clone() {
+            v.push(RequestType::AddHttpListener(other.http_listeners[*address].clone()).into());
+
+            if other.http_listeners[*address].active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Http.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for address in removed_https_listeners {
+            if self.https_listeners[*address].active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Https.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            v.push(
+                RequestType::RemoveListener(RemoveListener {
+                    address: SocketAddress::from(**address),
+                    proxy: ListenerType::Https.into(),
+                })
+                .into(),
+            );
+        }
+
+        for address in added_https_listeners.clone() {
+            v.push(RequestType::AddHttpsListener(other.https_listeners[*address].clone()).into());
+
+            if other.https_listeners[*address].active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**address),
+                        proxy: ListenerType::Https.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for addr in my_tcp_listeners.intersection(&their_tcp_listeners) {
+            let my_listener = &self.tcp_listeners[*addr];
+            let their_listener = &other.tcp_listeners[*addr];
+
+            if my_listener != their_listener {
+                v.push(
+                    RequestType::RemoveListener(RemoveListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Tcp.into(),
+                    })
+                    .into(),
+                );
+                // any added listener should be unactive
+                let mut listener_to_add = *their_listener;
+                listener_to_add.active = false;
+                v.push(RequestType::AddTcpListener(listener_to_add).into());
+            }
+
+            if my_listener.active && !their_listener.active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Tcp.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            if !my_listener.active && their_listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Tcp.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for addr in my_http_listeners.intersection(&their_http_listeners) {
+            let my_listener = &self.http_listeners[*addr];
+            let their_listener = &other.http_listeners[*addr];
+
+            if my_listener != their_listener {
+                v.push(
+                    RequestType::RemoveListener(RemoveListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Http.into(),
+                    })
+                    .into(),
+                );
+                // any added listener should be unactive
+                let mut listener_to_add = their_listener.clone();
+                listener_to_add.active = false;
+                v.push(RequestType::AddHttpListener(listener_to_add).into());
+            }
+
+            if my_listener.active && !their_listener.active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Http.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            if !my_listener.active && their_listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Http.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for addr in my_https_listeners.intersection(&their_https_listeners) {
+            let my_listener = &self.https_listeners[*addr];
+            let their_listener = &other.https_listeners[*addr];
+
+            if my_listener != their_listener {
+                v.push(
+                    RequestType::RemoveListener(RemoveListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Https.into(),
+                    })
+                    .into(),
+                );
+                // any added listener should be unactive
+                let mut listener_to_add = their_listener.clone();
+                listener_to_add.active = false;
+                v.push(RequestType::AddHttpsListener(listener_to_add).into());
+            }
+
+            if my_listener.active && !their_listener.active {
+                v.push(
+                    RequestType::DeactivateListener(DeactivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Https.into(),
+                        to_scm: false,
+                    })
+                    .into(),
+                );
+            }
+
+            if !my_listener.active && their_listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: SocketAddress::from(**addr),
+                        proxy: ListenerType::Https.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for (cluster_id, res) in diff_map(self.clusters.iter(), other.clusters.iter()) {
+            match res {
+                DiffResult::Added | DiffResult::Changed => v.push(
+                    RequestType::AddCluster(other.clusters.get(cluster_id).unwrap().clone()).into(),
+                ),
+                DiffResult::Removed => {
+                    v.push(RequestType::RemoveCluster(cluster_id.to_string()).into())
+                }
+            }
+        }
+
+        for ((cluster_id, backend_id), res) in diff_map(
+            self.backends.iter().flat_map(|(cluster_id, v)| {
+                v.iter()
+                    .map(move |backend| ((cluster_id, &backend.backend_id), backend))
+            }),
+            other.backends.iter().flat_map(|(cluster_id, v)| {
+                v.iter()
+                    .map(move |backend| ((cluster_id, &backend.backend_id), backend))
+            }),
+        ) {
+            match res {
+                DiffResult::Added => {
+                    let backend = other
+                        .backends
+                        .get(cluster_id)
+                        .and_then(|v| v.iter().find(|b| &b.backend_id == backend_id))
+                        .unwrap();
+                    v.push(RequestType::AddBackend(backend.clone().to_add_backend()).into());
+                }
+                DiffResult::Removed => {
+                    let backend = self
+                        .backends
+                        .get(cluster_id)
+                        .and_then(|v| v.iter().find(|b| &b.backend_id == backend_id))
+                        .unwrap();
+
+                    v.push(
+                        RequestType::RemoveBackend(RemoveBackend {
+                            cluster_id: backend.cluster_id.clone(),
+                            backend_id: backend.backend_id.clone(),
+                            address: SocketAddress::from(backend.address),
+                        })
+                        .into(),
+                    );
+                }
+                DiffResult::Changed => {
+                    let backend = self
+                        .backends
+                        .get(cluster_id)
+                        .and_then(|v| v.iter().find(|b| &b.backend_id == backend_id))
+                        .unwrap();
+
+                    v.push(
+                        RequestType::RemoveBackend(RemoveBackend {
+                            cluster_id: backend.cluster_id.clone(),
+                            backend_id: backend.backend_id.clone(),
+                            address: SocketAddress::from(backend.address),
+                        })
+                        .into(),
+                    );
+
+                    let backend = other
+                        .backends
+                        .get(cluster_id)
+                        .and_then(|v| v.iter().find(|b| &b.backend_id == backend_id))
+                        .unwrap();
+                    v.push(RequestType::AddBackend(backend.clone().to_add_backend()).into());
+                }
+            }
+        }
+
+        let mut my_http_fronts: HashSet<(&str, &HttpFrontend)> = HashSet::new();
+        for (route, front) in self.http_fronts.iter() {
+            my_http_fronts.insert((route, front));
+        }
+        let mut their_http_fronts: HashSet<(&str, &HttpFrontend)> = HashSet::new();
+        for (route, front) in other.http_fronts.iter() {
+            their_http_fronts.insert((route, front));
+        }
+
+        let removed_http_fronts = my_http_fronts.difference(&their_http_fronts);
+        let added_http_fronts = their_http_fronts.difference(&my_http_fronts);
+
+        for &(_, front) in removed_http_fronts {
+            v.push(RequestType::RemoveHttpFrontend(front.clone().into()).into());
+        }
+
+        for &(_, front) in added_http_fronts {
+            v.push(RequestType::AddHttpFrontend(front.clone().into()).into());
+        }
+
+        let mut my_https_fronts: HashSet<(&String, &HttpFrontend)> = HashSet::new();
+        for (route, front) in self.https_fronts.iter() {
+            my_https_fronts.insert((route, front));
+        }
+        let mut their_https_fronts: HashSet<(&String, &HttpFrontend)> = HashSet::new();
+        for (route, front) in other.https_fronts.iter() {
+            their_https_fronts.insert((route, front));
+        }
+        let removed_https_fronts = my_https_fronts.difference(&their_https_fronts);
+        let added_https_fronts = their_https_fronts.difference(&my_https_fronts);
+
+        for &(_, front) in removed_https_fronts {
+            v.push(RequestType::RemoveHttpsFrontend(front.clone().into()).into());
+        }
+
+        for &(_, front) in added_https_fronts {
+            v.push(RequestType::AddHttpsFrontend(front.clone().into()).into());
+        }
+
+        let mut my_tcp_fronts: HashSet<(&ClusterId, &TcpFrontend)> = HashSet::new();
+        for (cluster_id, front_list) in self.tcp_fronts.iter() {
+            for front in front_list.iter() {
+                my_tcp_fronts.insert((cluster_id, front));
+            }
+        }
+        let mut their_tcp_fronts: HashSet<(&ClusterId, &TcpFrontend)> = HashSet::new();
+        for (cluster_id, front_list) in other.tcp_fronts.iter() {
+            for front in front_list.iter() {
+                their_tcp_fronts.insert((cluster_id, front));
+            }
+        }
+
+        let removed_tcp_fronts = my_tcp_fronts.difference(&their_tcp_fronts);
+        let added_tcp_fronts = their_tcp_fronts.difference(&my_tcp_fronts);
+
+        for &(_, front) in removed_tcp_fronts {
+            v.push(RequestType::RemoveTcpFrontend(front.clone().into()).into());
+        }
+
+        for &(_, front) in added_tcp_fronts {
+            v.push(RequestType::AddTcpFrontend(front.clone().into()).into());
+        }
+
+        //pub certificates:    HashMap<SocketAddr, HashMap<CertificateFingerprint, (CertificateAndKey, Vec<String>)>>,
+        let my_certificates: HashSet<(SocketAddr, &Fingerprint)> = HashSet::from_iter(
+            self.certificates
+                .iter()
+                .flat_map(|(addr, certs)| repeat(*addr).zip(certs.keys())),
+        );
+        let their_certificates: HashSet<(SocketAddr, &Fingerprint)> = HashSet::from_iter(
+            other
+                .certificates
+                .iter()
+                .flat_map(|(addr, certs)| repeat(*addr).zip(certs.keys())),
+        );
+
+        let removed_certificates = my_certificates.difference(&their_certificates);
+        let added_certificates = their_certificates.difference(&my_certificates);
+
+        for &(address, fingerprint) in removed_certificates {
+            v.push(
+                RequestType::RemoveCertificate(RemoveCertificate {
+                    address: SocketAddress::from(address),
+                    fingerprint: fingerprint.to_string(),
+                })
+                .into(),
+            );
+        }
+
+        for &(address, fingerprint) in added_certificates {
+            if let Some(certificate_and_key) = other
+                .certificates
+                .get(&address)
+                .and_then(|certs| certs.get(fingerprint))
+            {
+                v.push(
+                    RequestType::AddCertificate(AddCertificate {
+                        address: SocketAddress::from(address),
+                        certificate: certificate_and_key.clone(),
+                        expired_at: None,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        for address in added_tcp_listeners {
+            let listener = &other.tcp_listeners[*address];
+            if listener.active {
+                v.push(
+                    RequestType::ActivateListener(ActivateListener {
+                        address: listener.address,
+                        proxy: ListenerType::Tcp.into(),
+                        from_scm: false,
+                    })
+                    .into(),
+                );
+            }
+        }
+
+        v
+    }
+
+    // FIXME: what about deny rules?
+    pub fn hash_state(&self) -> BTreeMap<ClusterId, u64> {
+        let mut hm: HashMap<ClusterId, DefaultHasher> = self
+            .clusters
+            .keys()
+            .map(|cluster_id| {
+                let mut hasher = DefaultHasher::new();
+                self.clusters.get(cluster_id).hash(&mut hasher);
+                if let Some(backends) = self.backends.get(cluster_id) {
+                    backends.iter().collect::<BTreeSet<_>>().hash(&mut hasher)
+                }
+                if let Some(tcp_fronts) = self.tcp_fronts.get(cluster_id) {
+                    tcp_fronts.iter().collect::<BTreeSet<_>>().hash(&mut hasher)
+                }
+                (cluster_id.to_owned(), hasher)
+            })
+            .collect();
+
+        for front in self.http_fronts.values() {
+            if let Some(cluster_id) = &front.cluster_id {
+                if let Some(hasher) = hm.get_mut(cluster_id) {
+                    front.hash(hasher);
+                }
+            }
+        }
+
+        for front in self.https_fronts.values() {
+            if let Some(cluster_id) = &front.cluster_id {
+                if let Some(hasher) = hm.get_mut(cluster_id) {
+                    front.hash(hasher);
+                }
+            }
+        }
+
+        hm.drain()
+            .map(|(cluster_id, hasher)| (cluster_id, hasher.finish()))
+            .collect()
+    }
+
+    /// Gives details about a given cluster.
+    /// Types like `HttpFrontend` are converted into protobuf ones, like `RequestHttpFrontend`
+    pub fn cluster_state(&self, cluster_id: &str) -> Option<ClusterInformation> {
+        let configuration = self.clusters.get(cluster_id).cloned()?;
+        info!("{:?}", configuration);
+
+        let http_frontends: Vec<RequestHttpFrontend> = self
+            .http_fronts
+            .values()
+            .filter(|front| front.cluster_id.as_deref() == Some(cluster_id))
+            .map(|front| front.clone().into())
+            .collect();
+
+        let https_frontends: Vec<RequestHttpFrontend> = self
+            .https_fronts
+            .values()
+            .filter(|front| front.cluster_id.as_deref() == Some(cluster_id))
+            .map(|front| front.clone().into())
+            .collect();
+
+        let tcp_frontends: Vec<RequestTcpFrontend> = self
+            .tcp_fronts
+            .get(cluster_id)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|front| front.clone().into())
+            .collect();
+
+        let backends: Vec<AddBackend> = self
+            .backends
+            .get(cluster_id)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|backend| backend.clone().into())
+            .collect();
+
+        Some(ClusterInformation {
+            configuration: Some(configuration),
+            http_frontends,
+            https_frontends,
+            tcp_frontends,
+            backends,
+        })
+    }
+
+    pub fn count_backends(&self) -> usize {
+        self.backends.values().fold(0, |acc, v| acc + v.len())
+    }
+
+    pub fn count_frontends(&self) -> usize {
+        self.http_fronts.values().count()
+            + self.https_fronts.values().count()
+            + self.tcp_fronts.values().fold(0, |acc, v| acc + v.len())
+    }
+
+    pub fn get_cluster_ids_by_domain(
+        &self,
+        hostname: String,
+        path: Option<String>,
+    ) -> HashSet<ClusterId> {
+        let mut cluster_ids: HashSet<ClusterId> = HashSet::new();
+
+        self.http_fronts.values().for_each(|front| {
+            if domain_check(&front.hostname, &front.path, &hostname, &path) {
+                if let Some(id) = &front.cluster_id {
+                    cluster_ids.insert(id.to_string());
+                }
+            }
+        });
+
+        self.https_fronts.values().for_each(|front| {
+            if domain_check(&front.hostname, &front.path, &hostname, &path) {
+                if let Some(id) = &front.cluster_id {
+                    cluster_ids.insert(id.to_string());
+                }
+            }
+        });
+
+        cluster_ids
+    }
+
+    pub fn get_certificates(
+        &self,
+        filters: QueryCertificatesFilters,
+    ) -> BTreeMap<String, CertificateAndKey> {
+        self.certificates
+            .values()
+            .flat_map(|hash_map| hash_map.iter())
+            .filter(|(fingerprint, cert)| {
+                if let Some(domain) = &filters.domain {
+                    cert.names.contains(domain)
+                } else if let Some(f) = &filters.fingerprint {
+                    fingerprint.to_string() == *f
+                } else {
+                    true
+                }
+            })
+            .map(|(fingerprint, cert)| (fingerprint.to_string(), cert.to_owned()))
+            .collect()
+    }
+
+    pub fn list_frontends(&self, filters: FrontendFilters) -> ListedFrontends {
+        // if no http / https / tcp filter is provided, list all of them
+        let list_all = !filters.http && !filters.https && !filters.tcp;
+
+        let mut listed_frontends = ListedFrontends::default();
+
+        if filters.http || list_all {
+            for http_frontend in self.http_fronts.iter().filter(|f| {
+                if let Some(domain) = &filters.domain {
+                    f.1.hostname.contains(domain)
+                } else {
+                    true
+                }
+            }) {
+                listed_frontends
+                    .http_frontends
+                    .push(http_frontend.1.to_owned().into());
+            }
+        }
+
+        if filters.https || list_all {
+            for https_frontend in self.https_fronts.iter().filter(|f| {
+                if let Some(domain) = &filters.domain {
+                    f.1.hostname.contains(domain)
+                } else {
+                    true
+                }
+            }) {
+                listed_frontends
+                    .https_frontends
+                    .push(https_frontend.1.to_owned().into());
+            }
+        }
+
+        if (filters.tcp || list_all) && filters.domain.is_none() {
+            for tcp_frontend in self.tcp_fronts.values().flat_map(|v| v.iter()) {
+                listed_frontends
+                    .tcp_frontends
+                    .push(tcp_frontend.to_owned().into())
+            }
+        }
+
+        listed_frontends
+    }
+
+    pub fn list_listeners(&self) -> ListenersList {
+        ListenersList {
+            http_listeners: self
+                .http_listeners
+                .iter()
+                .map(|(addr, listener)| (addr.to_string(), listener.clone()))
+                .collect(),
+            https_listeners: self
+                .https_listeners
+                .iter()
+                .map(|(addr, listener)| (addr.to_string(), listener.clone()))
+                .collect(),
+            tcp_listeners: self
+                .tcp_listeners
+                .iter()
+                .map(|(addr, listener)| (addr.to_string(), *listener))
+                .collect(),
+        }
+    }
+
+    // create requests needed for a worker to recreate the state
+    pub fn produce_initial_state(&self) -> InitialState {
+        let mut worker_requests = Vec::new();
+        for (counter, request) in self.generate_requests().into_iter().enumerate() {
+            worker_requests.push(WorkerRequest::new(format!("SAVE-{counter}"), request));
+        }
+        InitialState {
+            requests: worker_requests,
+        }
+    }
+
+    /// generate requests necessary to recreate the state,
+    /// in protobuf, to a temp file
+    pub fn write_initial_state_to_file(&self, file: &mut File) -> Result<usize, StateError> {
+        let initial_state = self.produce_initial_state();
+        let count = initial_state.requests.len();
+
+        let bytes_to_write = initial_state.encode_to_vec();
+        println!("writing {} in the temp file", bytes_to_write.len());
+        file.write_all(&bytes_to_write)
+            .map_err(StateError::FileError)?;
+
+        file.sync_all().map_err(StateError::FileError)?;
+
+        Ok(count)
+    }
+
+    /// generate requests necessary to recreate the state,
+    /// write them in a JSON form in a file, separated by \n\0,
+    /// returns the number of written requests
+    pub fn write_requests_to_file(&self, file: &mut File) -> Result<usize, StateError> {
+        let mut counter = 0usize;
+        let requests = self.generate_requests();
+
+        for request in requests {
+            let message = WorkerRequest::new(format!("SAVE-{counter}"), request);
+
+            file.write_all(
+                &serde_json::to_string(&message)
+                    .map(|s| s.into_bytes())
+                    .unwrap_or_default(),
+            )
+            .map_err(StateError::FileError)?;
+
+            file.write_all(&b"\n\0"[..])
+                .map_err(StateError::FileError)?;
+
+            if counter % 1000 == 0 {
+                info!("writing {} commands to file", counter);
+                file.sync_all().map_err(StateError::FileError)?;
+            }
+            counter += 1;
+        }
+        file.sync_all().map_err(StateError::FileError)?;
+
+        Ok(counter)
+    }
+}
+
+/// Validate all H2 flood knobs in an HTTP listener patch.
+///
+/// Every flood-detector knob (including stream-0 WINDOW_UPDATE) requires a
+/// value `>= 1`. Passing `0` would disable the detector entirely and leave the
+/// proxy open to CVE-2023-44487 and related attacks. The runtime constructor
+/// `H2FloodConfig::new()` applies the same `.max(1)` clamping, but a raw
+/// protobuf client can bypass the CLI layer, so we enforce the bound here too.
+///
+/// `h2_max_concurrent_streams` and `h2_stream_shrink_ratio` are connection-
+/// config knobs that also require `>= 1`.
+///
+/// `h2_graceful_shutdown_deadline_seconds = 0` is intentionally **allowed** —
+/// it means "wait forever (no forced close after GOAWAY)".
+pub fn validate_h2_flood_knobs_http(patch: &UpdateHttpListenerConfig) -> Result<(), StateError> {
+    macro_rules! require_ge1 {
+        ($field:expr, $name:literal) => {
+            if let Some(0) = $field {
+                return Err(StateError::InvalidValue {
+                    field: $name,
+                    reason: "must be >= 1",
+                });
+            }
+        };
+    }
+    require_ge1!(
+        patch.h2_max_rst_stream_per_window,
+        "h2_max_rst_stream_per_window"
+    );
+    require_ge1!(patch.h2_max_ping_per_window, "h2_max_ping_per_window");
+    require_ge1!(
+        patch.h2_max_settings_per_window,
+        "h2_max_settings_per_window"
+    );
+    require_ge1!(
+        patch.h2_max_empty_data_per_window,
+        "h2_max_empty_data_per_window"
+    );
+    require_ge1!(
+        patch.h2_max_continuation_frames,
+        "h2_max_continuation_frames"
+    );
+    require_ge1!(patch.h2_max_glitch_count, "h2_max_glitch_count");
+    require_ge1!(
+        patch.h2_max_window_update_stream0_per_window,
+        "h2_max_window_update_stream0_per_window"
+    );
+    require_ge1!(patch.h2_max_concurrent_streams, "h2_max_concurrent_streams");
+    // Shrink ratio runtime floor is 2 (lib/src/protocol/mux/h2.rs ~448 .max(2));
+    // anything lower is silently promoted so reject at control plane.
+    if let Some(v) = patch.h2_stream_shrink_ratio {
+        if v < 2 {
+            return Err(StateError::InvalidValue {
+                field: "h2_stream_shrink_ratio",
+                reason: "must be >= 2",
+            });
+        }
+    }
+    // Lifetime caps and HPACK limits — must be >= 1 or the runtime trips on the
+    // first qualifying frame. doc/configure.md advertises "u64 (>= 1)" etc.
+    require_ge1!(
+        patch.h2_max_rst_stream_lifetime,
+        "h2_max_rst_stream_lifetime"
+    );
+    require_ge1!(
+        patch.h2_max_rst_stream_abusive_lifetime,
+        "h2_max_rst_stream_abusive_lifetime"
+    );
+    require_ge1!(
+        patch.h2_max_rst_stream_emitted_lifetime,
+        "h2_max_rst_stream_emitted_lifetime"
+    );
+    require_ge1!(patch.h2_max_header_list_size, "h2_max_header_list_size");
+    require_ge1!(patch.h2_max_header_table_size, "h2_max_header_table_size");
+    Ok(())
+}
+
+/// Validate all H2 flood knobs in an HTTPS listener patch (same rules as HTTP).
+pub fn validate_h2_flood_knobs_https(patch: &UpdateHttpsListenerConfig) -> Result<(), StateError> {
+    macro_rules! require_ge1 {
+        ($field:expr, $name:literal) => {
+            if let Some(0) = $field {
+                return Err(StateError::InvalidValue {
+                    field: $name,
+                    reason: "must be >= 1",
+                });
+            }
+        };
+    }
+    require_ge1!(
+        patch.h2_max_rst_stream_per_window,
+        "h2_max_rst_stream_per_window"
+    );
+    require_ge1!(patch.h2_max_ping_per_window, "h2_max_ping_per_window");
+    require_ge1!(
+        patch.h2_max_settings_per_window,
+        "h2_max_settings_per_window"
+    );
+    require_ge1!(
+        patch.h2_max_empty_data_per_window,
+        "h2_max_empty_data_per_window"
+    );
+    require_ge1!(
+        patch.h2_max_continuation_frames,
+        "h2_max_continuation_frames"
+    );
+    require_ge1!(patch.h2_max_glitch_count, "h2_max_glitch_count");
+    require_ge1!(
+        patch.h2_max_window_update_stream0_per_window,
+        "h2_max_window_update_stream0_per_window"
+    );
+    require_ge1!(patch.h2_max_concurrent_streams, "h2_max_concurrent_streams");
+    if let Some(v) = patch.h2_stream_shrink_ratio {
+        if v < 2 {
+            return Err(StateError::InvalidValue {
+                field: "h2_stream_shrink_ratio",
+                reason: "must be >= 2",
+            });
+        }
+    }
+    require_ge1!(
+        patch.h2_max_rst_stream_lifetime,
+        "h2_max_rst_stream_lifetime"
+    );
+    require_ge1!(
+        patch.h2_max_rst_stream_abusive_lifetime,
+        "h2_max_rst_stream_abusive_lifetime"
+    );
+    require_ge1!(
+        patch.h2_max_rst_stream_emitted_lifetime,
+        "h2_max_rst_stream_emitted_lifetime"
+    );
+    require_ge1!(patch.h2_max_header_list_size, "h2_max_header_list_size");
+    require_ge1!(patch.h2_max_header_table_size, "h2_max_header_table_size");
+    Ok(())
+}
+
+/// Validate a `sozu_id_header` value against RFC 9110 §5.1 header-name grammar.
+///
+/// Rejects empty strings and strings containing CR, LF, colon, space, or tab —
+/// a conservative approximation of the token grammar that covers all practical
+/// injection vectors without a full RFC 9110 tokenizer.
+/// Merge a `CustomHttpAnswers` patch into the listener's stored answers,
+/// preserving any field not present in the patch.
+///
+/// Field-mask semantic: `None` in `patch` means "preserve", `Some` means
+/// "replace". A no-op patch (all-None) leaves `target` untouched. If `target`
+/// is currently `None`, initialize it from the patch (any `None` field stays
+/// `None` so hot-upgrade replay sees the same partial state).
+pub fn merge_custom_http_answers(
+    target: &mut Option<CustomHttpAnswers>,
+    patch: &CustomHttpAnswers,
+) {
+    let current = target.get_or_insert_with(CustomHttpAnswers::default);
+    macro_rules! merge_field {
+        ($field:ident) => {
+            if let Some(ref v) = patch.$field {
+                current.$field = Some(v.clone());
+            }
+        };
+    }
+    merge_field!(answer_301);
+    merge_field!(answer_400);
+    merge_field!(answer_401);
+    merge_field!(answer_404);
+    merge_field!(answer_408);
+    merge_field!(answer_413);
+    merge_field!(answer_421);
+    merge_field!(answer_502);
+    merge_field!(answer_503);
+    merge_field!(answer_504);
+    merge_field!(answer_507);
+}
+
+/// Validate an `AlpnProtocols` patch: each value must be "h2" or "http/1.1".
+/// Empty values vec is allowed (reset-to-default).
+pub fn validate_alpn_protocols(values: &[String]) -> Result<(), StateError> {
+    for value in values {
+        if value != "h2" && value != "http/1.1" {
+            return Err(StateError::InvalidValue {
+                field: "alpn_protocols",
+                reason: "each value must be \"h2\" or \"http/1.1\"",
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Validate a `sozu_id_header` value against the RFC 9110 §5.1 `token` grammar:
+///
+/// ```text
+/// token  = 1*tchar
+/// tchar  = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+///          "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+/// ```
+///
+/// Rejects empty strings, non-ASCII bytes, controls (including CR/LF/tab),
+/// separators (including colon and space), and any other non-`tchar` byte.
+pub fn validate_sozu_id_header(value: &str) -> Result<(), StateError> {
+    if value.is_empty() {
+        return Err(StateError::InvalidValue {
+            field: "sozu_id_header",
+            reason: "must not be empty",
+        });
+    }
+    for b in value.bytes() {
+        let is_tchar = b.is_ascii_alphanumeric()
+            || matches!(
+                b,
+                b'!' | b'#'
+                    | b'$'
+                    | b'%'
+                    | b'&'
+                    | b'\''
+                    | b'*'
+                    | b'+'
+                    | b'-'
+                    | b'.'
+                    | b'^'
+                    | b'_'
+                    | b'`'
+                    | b'|'
+                    | b'~'
+            );
+        if !is_tchar {
+            return Err(StateError::InvalidValue {
+                field: "sozu_id_header",
+                reason: "must be a valid HTTP header name (RFC 9110 §5.1 token: alphanumeric or one of !#$%&'*+-.^_`|~)",
+            });
+        }
+    }
+    Ok(())
+}
+
+fn domain_check(
+    front_hostname: &str,
+    front_path_rule: &PathRule,
+    hostname: &str,
+    path_prefix: &Option<String>,
+) -> bool {
+    if hostname != front_hostname {
+        return false;
+    }
+
+    if let Some(path) = &path_prefix {
+        return path == &front_path_rule.value;
+    }
+
+    true
+}
+
+struct DiffMap<'a, K: Ord, V, I1, I2> {
+    my_it: I1,
+    other_it: I2,
+    my: Option<(K, &'a V)>,
+    other: Option<(K, &'a V)>,
+}
+
+//fn diff_map<'a, K:Ord, V: PartialEq>(my: &'a BTreeMap<K,V>, other: &'a BTreeMap<K,V>) -> DiffMap<'a,K,V> {
+fn diff_map<
+    'a,
+    K: Ord,
+    V: PartialEq,
+    I1: Iterator<Item = (K, &'a V)>,
+    I2: Iterator<Item = (K, &'a V)>,
+>(
+    my: I1,
+    other: I2,
+) -> DiffMap<'a, K, V, I1, I2> {
+    DiffMap {
+        my_it: my,
+        other_it: other,
+        my: None,
+        other: None,
+    }
+}
+
+enum DiffResult {
+    Added,
+    Removed,
+    Changed,
+}
+
+// this will iterate over the keys of both iterators
+// since keys are sorted, it should be easy to see which ones are in common or not
+impl<'a, K: Ord, V: PartialEq, I1: Iterator<Item = (K, &'a V)>, I2: Iterator<Item = (K, &'a V)>>
+    std::iter::Iterator for DiffMap<'a, K, V, I1, I2>
+{
+    type Item = (K, DiffResult);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.my.is_none() {
+                self.my = self.my_it.next();
+            }
+            if self.other.is_none() {
+                self.other = self.other_it.next();
+            }
+
+            match (self.my.take(), self.other.take()) {
+                // there are no more elements in my_it, all the next elements in other
+                // should be added
+                // if other was none, we will stop the iterator there
+                (None, other) => return other.map(|(k, _)| (k, DiffResult::Added)),
+                // there are no more elements in other_it, all the next elements in my
+                // should be removed
+                (Some((k, _)), None) => return Some((k, DiffResult::Removed)),
+                // element is present in my but not other
+                (Some((k1, _v1)), Some((k2, v2))) if k1 < k2 => {
+                    self.other = Some((k2, v2));
+                    return Some((k1, DiffResult::Removed));
+                }
+                // element is present in other byt not in my
+                (Some((k1, v1)), Some((k2, _v2))) if k1 > k2 => {
+                    self.my = Some((k1, v1));
+                    return Some((k2, DiffResult::Added));
+                }
+                (Some((k1, v1)), Some((_k2, v2))) if v1 != v2 => {
+                    // key is present in both, if elements have changed
+                    // return a value, otherwise go to the next key for both maps
+                    return Some((k1, DiffResult::Changed));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{RngExt, rng, seq::SliceRandom};
+
+    use super::*;
+    use crate::proto::command::{
+        CustomHttpAnswers, LoadBalancingParams, RequestHttpFrontend, RequestTcpFrontend,
+        RulePosition,
+    };
+
+    #[test]
+    fn serialize() {
+        let mut state: ConfigState = Default::default();
+        state
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("lolcatho.st:8080"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Tree.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_2")),
+                    hostname: String::from("test.local"),
+                    path: PathRule::prefix(String::from("/abc")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Pre.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-1"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1027),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_2"),
+                    backend_id: String::from("cluster_2-0"),
+                    address: SocketAddress::new_v4(192, 167, 1, 2, 1026),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-3"),
+                    address: SocketAddress::new_v4(192, 168, 1, 3, 1027),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::RemoveBackend(RemoveBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-3"),
+                    address: SocketAddress::new_v4(192, 168, 1, 3, 1027),
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        /*
+        let encoded = state.encode();
+        println!("serialized:\n{}", encoded);
+
+        let new_state: Option<HttpProxy> = decode_str(&encoded);
+        println!("deserialized:\n{:?}", new_state);
+        assert_eq!(new_state, Some(state));
+        */
+        //assert!(false);
+    }
+
+    #[test]
+    fn diff() {
+        let mut state: ConfigState = Default::default();
+        state
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("lolcatho.st:8080"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Post.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_2")),
+                    hostname: String::from("test.local"),
+                    path: PathRule::prefix(String::from("/abc")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-1"),
+                    address: SocketAddress::new_v4(127, 0, 0, 2, 1027),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_2"),
+                    backend_id: String::from("cluster_2-0"),
+                    address: SocketAddress::new_v4(192, 167, 1, 2, 1026),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddCluster(Cluster {
+                    cluster_id: String::from("cluster_2"),
+                    sticky_session: true,
+                    https_redirect: true,
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        let mut state2: ConfigState = Default::default();
+        state2
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("lolcatho.st:8080"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Post.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-1"),
+                    address: SocketAddress::new_v4(127, 0, 0, 2, 1027),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-2"),
+                    address: SocketAddress::new_v4(127, 0, 0, 2, 1028),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddCluster(Cluster {
+                    cluster_id: String::from("cluster_3"),
+                    sticky_session: false,
+                    https_redirect: false,
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        let e: Vec<Request> = vec![
+            RequestType::RemoveHttpFrontend(RequestHttpFrontend {
+                cluster_id: Some(String::from("cluster_2")),
+                hostname: String::from("test.local"),
+                path: PathRule::prefix(String::from("/abc")),
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                ..Default::default()
+            })
+            .into(),
+            RequestType::RemoveBackend(RemoveBackend {
+                cluster_id: String::from("cluster_2"),
+                backend_id: String::from("cluster_2-0"),
+                address: SocketAddress::new_v4(192, 167, 1, 2, 1026),
+            })
+            .into(),
+            RequestType::AddBackend(AddBackend {
+                cluster_id: String::from("cluster_1"),
+                backend_id: String::from("cluster_1-2"),
+                address: SocketAddress::new_v4(127, 0, 0, 2, 1028),
+                load_balancing_parameters: Some(LoadBalancingParams::default()),
+                ..Default::default()
+            })
+            .into(),
+            RequestType::RemoveCluster(String::from("cluster_2")).into(),
+            RequestType::AddCluster(Cluster {
+                cluster_id: String::from("cluster_3"),
+                sticky_session: false,
+                https_redirect: false,
+                ..Default::default()
+            })
+            .into(),
+        ];
+        let expected_diff: HashSet<&Request> = HashSet::from_iter(e.iter());
+
+        let d = state.diff(&state2);
+        let diff = HashSet::from_iter(d.iter());
+        println!("diff requests:\n{diff:#?}\n");
+        println!("expected diff requests:\n{expected_diff:#?}\n");
+
+        let hash1 = state.hash_state();
+        let hash2 = state2.hash_state();
+        let mut state3 = state.clone();
+        state3
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-2"),
+                    address: SocketAddress::new_v4(127, 0, 0, 2, 1028),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        let hash3 = state3.hash_state();
+        println!("state 1 hashes: {hash1:#?}");
+        println!("state 2 hashes: {hash2:#?}");
+        println!("state 3 hashes: {hash3:#?}");
+
+        assert_eq!(diff, expected_diff);
+    }
+
+    #[test]
+    fn cluster_ids_by_domain() {
+        let mut config = ConfigState::new();
+        let http_front_cluster1 = RequestHttpFrontend {
+            cluster_id: Some(String::from("MyCluster_1")),
+            hostname: String::from("lolcatho.st"),
+            path: PathRule::prefix(String::from("")),
+            address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+            ..Default::default()
+        };
+
+        let https_front_cluster1 = RequestHttpFrontend {
+            cluster_id: Some(String::from("MyCluster_1")),
+            hostname: String::from("lolcatho.st"),
+            path: PathRule::prefix(String::from("")),
+            address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+            ..Default::default()
+        };
+
+        let http_front_cluster2 = RequestHttpFrontend {
+            cluster_id: Some(String::from("MyCluster_2")),
+            hostname: String::from("lolcatho.st"),
+            path: PathRule::prefix(String::from("/api")),
+            address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+            ..Default::default()
+        };
+
+        let https_front_cluster2 = RequestHttpFrontend {
+            cluster_id: Some(String::from("MyCluster_2")),
+            hostname: String::from("lolcatho.st"),
+            path: PathRule::prefix(String::from("/api")),
+            address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+            ..Default::default()
+        };
+
+        config
+            .dispatch(&RequestType::AddHttpFrontend(http_front_cluster1).into())
+            .expect("Could not execute request");
+        config
+            .dispatch(&RequestType::AddHttpFrontend(http_front_cluster2).into())
+            .expect("Could not execute request");
+        config
+            .dispatch(&RequestType::AddHttpsFrontend(https_front_cluster1).into())
+            .expect("Could not execute request");
+        config
+            .dispatch(&RequestType::AddHttpsFrontend(https_front_cluster2).into())
+            .expect("Could not execute request");
+
+        let mut cluster1_cluster2: HashSet<ClusterId> = HashSet::new();
+        cluster1_cluster2.insert(String::from("MyCluster_1"));
+        cluster1_cluster2.insert(String::from("MyCluster_2"));
+
+        let mut cluster2: HashSet<ClusterId> = HashSet::new();
+        cluster2.insert(String::from("MyCluster_2"));
+
+        let empty: HashSet<ClusterId> = HashSet::new();
+        assert_eq!(
+            config.get_cluster_ids_by_domain(String::from("lolcatho.st"), None),
+            cluster1_cluster2
+        );
+        assert_eq!(
+            config
+                .get_cluster_ids_by_domain(String::from("lolcatho.st"), Some(String::from("/api"))),
+            cluster2
+        );
+        assert_eq!(
+            config.get_cluster_ids_by_domain(String::from("lolcathost"), None),
+            empty
+        );
+        assert_eq!(
+            config
+                .get_cluster_ids_by_domain(String::from("lolcathost"), Some(String::from("/sozu"))),
+            empty
+        );
+    }
+
+    #[test]
+    fn duplicate_backends() {
+        let mut state: ConfigState = Default::default();
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    load_balancing_parameters: Some(LoadBalancingParams::default()),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        let b = Backend {
+            cluster_id: String::from("cluster_1"),
+            backend_id: String::from("cluster_1-0"),
+            address: "127.0.0.1:1026".parse().unwrap(),
+            load_balancing_parameters: Some(LoadBalancingParams::default()),
+            sticky_id: Some("sticky".to_string()),
+            backup: None,
+        };
+
+        state
+            .dispatch(&RequestType::AddBackend(b.clone().to_add_backend()).into())
+            .expect("Could not execute order");
+
+        assert_eq!(state.backends.get("cluster_1").unwrap(), &vec![b]);
+    }
+
+    #[test]
+    fn remove_backend() {
+        let mut state: ConfigState = Default::default();
+        state
+            .dispatch(
+                &RequestType::AddCluster(Cluster {
+                    cluster_id: String::from("cluster_1"),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        for i in 0..10 {
+            state
+                .dispatch(
+                    &RequestType::AddBackend(AddBackend {
+                        cluster_id: String::from("cluster_1"),
+                        backend_id: format!("cluster_1-{i}"),
+                        address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                        ..Default::default()
+                    })
+                    .into(),
+                )
+                .expect("Could not execute request");
+        }
+
+        assert_eq!(state.backends.get("cluster_1").unwrap().len(), 10);
+
+        let remove_backend_2 = RequestType::RemoveBackend(RemoveBackend {
+            cluster_id: String::from("cluster_1"),
+            backend_id: String::from("cluster_1-0"),
+            address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+        })
+        .into();
+
+        let remove_backend_result = state.dispatch(&remove_backend_2);
+
+        assert!(remove_backend_result.is_ok());
+        assert_eq!(state.backends.get("cluster_1").unwrap().len(), 9);
+
+        let redundant_remove = state.dispatch(&remove_backend_2);
+        assert!(matches!(redundant_remove, Err(StateError::NoChange)));
+        assert_eq!(state.backends.get("cluster_1").unwrap().len(), 9);
+    }
+
+    #[test]
+    fn remove_backends_randomly() {
+        let mut state: ConfigState = Default::default();
+        state
+            .dispatch(
+                &RequestType::AddCluster(Cluster {
+                    cluster_id: String::from("cluster_1"),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        for _ in 0..1000 {
+            for i in 0..10 {
+                state
+                    .dispatch(
+                        &RequestType::AddBackend(AddBackend {
+                            cluster_id: String::from("cluster_1"),
+                            backend_id: format!("cluster_1-{i}"),
+                            address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                            ..Default::default()
+                        })
+                        .into(),
+                    )
+                    .expect("Could not execute request");
+            }
+
+            let mut rng = rng();
+            let mut indexes = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            indexes.shuffle(&mut rng);
+            let random_count = rng.random_range(1..indexes.len());
+            let random_indexes: Vec<i32> = indexes.into_iter().take(random_count).collect();
+
+            for j in random_indexes {
+                let remove_backend_result = state.dispatch(
+                    &RequestType::RemoveBackend(RemoveBackend {
+                        cluster_id: String::from("cluster_1"),
+                        backend_id: format!("cluster_1-{j}"),
+                        address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    })
+                    .into(),
+                );
+                assert!(remove_backend_result.is_ok());
+            }
+        }
+    }
+
+    #[test]
+    fn listener_diff() {
+        let mut state: ConfigState = Default::default();
+        let custom_http_answers = Some(CustomHttpAnswers {
+            answer_404: Some("test".to_string()),
+            ..Default::default()
+        });
+        state
+            .dispatch(
+                &RequestType::AddTcpListener(TcpListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                    proxy: ListenerType::Tcp.into(),
+                    from_scm: false,
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddHttpListener(HttpListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::AddHttpsListener(HttpsListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state
+            .dispatch(
+                &RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                    proxy: ListenerType::Https.into(),
+                    from_scm: false,
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        let mut state2: ConfigState = Default::default();
+        state2
+            .dispatch(
+                &RequestType::AddTcpListener(TcpListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                    expect_proxy: true,
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddHttpListener(HttpListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    http_answers: custom_http_answers.clone(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    proxy: ListenerType::Http.into(),
+                    from_scm: false,
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::AddHttpsListener(HttpsListenerConfig {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                    http_answers: custom_http_answers.clone(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        state2
+            .dispatch(
+                &RequestType::ActivateListener(ActivateListener {
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                    proxy: ListenerType::Https.into(),
+                    from_scm: false,
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+
+        let e: Vec<Request> = vec![
+            RequestType::RemoveListener(RemoveListener {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                proxy: ListenerType::Tcp.into(),
+            })
+            .into(),
+            RequestType::AddTcpListener(TcpListenerConfig {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                expect_proxy: true,
+                ..Default::default()
+            })
+            .into(),
+            RequestType::DeactivateListener(DeactivateListener {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 1234),
+                proxy: ListenerType::Tcp.into(),
+                to_scm: false,
+            })
+            .into(),
+            RequestType::RemoveListener(RemoveListener {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                proxy: ListenerType::Http.into(),
+            })
+            .into(),
+            RequestType::AddHttpListener(HttpListenerConfig {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                http_answers: custom_http_answers.clone(),
+                ..Default::default()
+            })
+            .into(),
+            RequestType::ActivateListener(ActivateListener {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                proxy: ListenerType::Http.into(),
+                from_scm: false,
+            })
+            .into(),
+            RequestType::RemoveListener(RemoveListener {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                proxy: ListenerType::Https.into(),
+            })
+            .into(),
+            RequestType::AddHttpsListener(HttpsListenerConfig {
+                address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                http_answers: custom_http_answers.clone(),
+                ..Default::default()
+            })
+            .into(),
+        ];
+
+        let diff = state.diff(&state2);
+        //let diff: HashSet<&RequestContent> = HashSet::from_iter(d.iter());
+        println!("expected diff requests:\n{e:#?}\n");
+        println!("diff requests:\n{diff:#?}\n");
+
+        let _hash1 = state.hash_state();
+        let _hash2 = state2.hash_state();
+
+        assert_eq!(diff, e);
+    }
+
+    #[test]
+    fn certificate_retrieval() {
+        let mut state: ConfigState = Default::default();
+        let certificate_and_key = CertificateAndKey {
+            certificate: String::from(include_str!("../assets/certificate.pem")),
+            key: String::from(include_str!("../assets/key.pem")),
+            certificate_chain: vec![],
+            versions: vec![],
+            names: vec!["lolcatho.st".to_string()],
+        };
+        let add_certificate = AddCertificate {
+            address: SocketAddress::new_v4(127, 0, 0, 1, 8080),
+            certificate: certificate_and_key,
+            expired_at: None,
+        };
+        state
+            .dispatch(&RequestType::AddCertificate(add_certificate).into())
+            .expect("Could not add certificate");
+
+        println!("state: {state:#?}");
+
+        // let fingerprint: Fingerprint = serde_json::from_str(
+        //     "\"ab2618b674e15243fd02a5618c66509e4840ba60e7d64cebec84cdbfeceee0c5\"",
+        // )
+        // .expect("Could not deserialize the fingerprint");
+
+        let certificates_found_by_fingerprint = state.get_certificates(QueryCertificatesFilters {
+            domain: None,
+            fingerprint: Some(
+                "ab2618b674e15243fd02a5618c66509e4840ba60e7d64cebec84cdbfeceee0c5".to_string(),
+            ),
+        });
+
+        println!("found certificate: {certificates_found_by_fingerprint:#?}");
+
+        assert!(!certificates_found_by_fingerprint.is_empty());
+
+        let certificate_found_by_domain_name = state.get_certificates(QueryCertificatesFilters {
+            domain: Some("lolcatho.st".to_string()),
+            fingerprint: None,
+        });
+
+        assert!(!certificate_found_by_domain_name.is_empty());
+    }
+
+    #[test]
+    fn count_backends_across_clusters() {
+        let mut state: ConfigState = Default::default();
+
+        assert_eq!(state.count_backends(), 0);
+
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_backends(), 1);
+
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-1"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1027),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_backends(), 2);
+
+        // add backend to a second cluster
+        state
+            .dispatch(
+                &RequestType::AddBackend(AddBackend {
+                    cluster_id: String::from("cluster_2"),
+                    backend_id: String::from("cluster_2-0"),
+                    address: SocketAddress::new_v4(192, 168, 1, 1, 8080),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_backends(), 3);
+
+        // remove a backend and verify count decreases
+        state
+            .dispatch(
+                &RequestType::RemoveBackend(RemoveBackend {
+                    cluster_id: String::from("cluster_1"),
+                    backend_id: String::from("cluster_1-0"),
+                    address: SocketAddress::new_v4(127, 0, 0, 1, 1026),
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_backends(), 2);
+    }
+
+    #[test]
+    fn count_frontends_across_types() {
+        let mut state: ConfigState = Default::default();
+
+        assert_eq!(state.count_frontends(), 0);
+
+        // add an HTTP frontend
+        state
+            .dispatch(
+                &RequestType::AddHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("example.com"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Tree.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_frontends(), 1);
+
+        // add an HTTPS frontend
+        state
+            .dispatch(
+                &RequestType::AddHttpsFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("secure.example.com"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8443),
+                    position: RulePosition::Tree.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_frontends(), 2);
+
+        // add a TCP frontend
+        state
+            .dispatch(
+                &RequestType::AddTcpFrontend(RequestTcpFrontend {
+                    cluster_id: String::from("cluster_2"),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 5432),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_frontends(), 3);
+
+        // add a second TCP frontend on the same cluster
+        state
+            .dispatch(
+                &RequestType::AddTcpFrontend(RequestTcpFrontend {
+                    cluster_id: String::from("cluster_2"),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 5433),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_frontends(), 4);
+
+        // remove the HTTP frontend
+        state
+            .dispatch(
+                &RequestType::RemoveHttpFrontend(RequestHttpFrontend {
+                    cluster_id: Some(String::from("cluster_1")),
+                    hostname: String::from("example.com"),
+                    path: PathRule::prefix(String::from("/")),
+                    address: SocketAddress::new_v4(0, 0, 0, 0, 8080),
+                    position: RulePosition::Tree.into(),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .expect("Could not execute request");
+        assert_eq!(state.count_frontends(), 3);
+    }
+
+    // ── helpers ────────────────────────────────────────────────────────────────
+
+    fn make_https_listener(address: SocketAddress) -> HttpsListenerConfig {
+        HttpsListenerConfig {
+            address,
+            sticky_name: "SOZUBALANCEID".to_owned(),
+            front_timeout: 60,
+            back_timeout: 30,
+            connect_timeout: 3,
+            request_timeout: 10,
+            ..Default::default()
+        }
+    }
+
+    fn make_http_listener(address: SocketAddress) -> HttpListenerConfig {
+        HttpListenerConfig {
+            address,
+            sticky_name: "SOZUBALANCEID".to_owned(),
+            front_timeout: 60,
+            back_timeout: 30,
+            connect_timeout: 3,
+            request_timeout: 10,
+            ..Default::default()
+        }
+    }
+
+    fn make_tcp_listener(address: SocketAddress) -> TcpListenerConfig {
+        TcpListenerConfig {
+            address,
+            front_timeout: 60,
+            back_timeout: 30,
+            connect_timeout: 3,
+            ..Default::default()
+        }
+    }
+
+    // ── update_https_listener ──────────────────────────────────────────────────
+
+    /// Happy path: patching two H2 flood knobs updates the map entry; all other
+    /// fields are left untouched.
+    #[test]
+    fn update_https_listener_happy_path_h2_knobs() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            h2_max_rst_stream_per_window: Some(50),
+            h2_max_ping_per_window: Some(20),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("update must succeed");
+
+        let listener = state
+            .https_listeners
+            .get(&SocketAddr::from(addr))
+            .expect("listener must be present");
+        assert_eq!(listener.h2_max_rst_stream_per_window, Some(50));
+        assert_eq!(listener.h2_max_ping_per_window, Some(20));
+        // Untouched fields must be unchanged
+        assert_eq!(listener.front_timeout, 60);
+        assert_eq!(listener.h2_max_settings_per_window, None);
+    }
+
+    /// NotFound: patching a listener address that was never registered returns
+    /// `StateError::NotFound`.
+    #[test]
+    fn update_https_listener_not_found() {
+        let mut state = ConfigState::new();
+        let patch = UpdateHttpsListenerConfig {
+            address: SocketAddress::new_v4(1, 2, 3, 4, 9999),
+            h2_max_rst_stream_per_window: Some(50),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::NotFound {
+                    kind: ObjectKind::HttpsListener,
+                    ..
+                }
+            ),
+            "expected NotFound, got: {err}"
+        );
+    }
+
+    /// No-op: a patch with only `address` set (all options None) is Ok and does
+    /// not change any field.
+    #[test]
+    fn update_https_listener_noop_patch() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        let original = make_https_listener(addr);
+        state
+            .dispatch(&RequestType::AddHttpsListener(original.clone()).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("no-op patch must succeed");
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.front_timeout, original.front_timeout);
+        assert_eq!(
+            listener.h2_max_rst_stream_per_window,
+            original.h2_max_rst_stream_per_window
+        );
+    }
+
+    /// InvalidValue: setting a flood knob to 0 must be rejected.
+    #[test]
+    fn update_https_listener_invalid_value_flood_knob_zero() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            h2_max_rst_stream_per_window: Some(0),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "h2_max_rst_stream_per_window",
+                    ..
+                }
+            ),
+            "expected InvalidValue for flood knob 0, got: {err}"
+        );
+    }
+
+    /// AddCluster: an inline `cluster.health_check` with a CRLF-bearing URI
+    /// must be rejected before the cluster lands in `ConfigState`. Without
+    /// this guard, TOML reload / SaveState / direct API AddCluster requests
+    /// bypass the SetHealthCheck-side check and let an attacker-controlled
+    /// health-check URI smuggle CR/LF into outbound HTTP/1.1 probes.
+    #[test]
+    fn add_cluster_invalid_health_check_uri_rejected() {
+        use crate::proto::command::HealthCheckConfig;
+
+        let mut state = ConfigState::new();
+        let err = state
+            .dispatch(
+                &RequestType::AddCluster(Cluster {
+                    cluster_id: String::from("evil_cluster"),
+                    health_check: Some(HealthCheckConfig {
+                        uri: String::from("/foo\r\nGET /admin"),
+                        interval: 5_000,
+                        timeout: 1_000,
+                        healthy_threshold: 2,
+                        unhealthy_threshold: 2,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })
+                .into(),
+            )
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "health_check",
+                    ..
+                }
+            ),
+            "expected InvalidValue for CRLF-bearing health-check URI, got: {err}"
+        );
+        assert!(
+            !state.clusters.contains_key("evil_cluster"),
+            "cluster must not be inserted when health_check fails validation",
+        );
+    }
+
+    /// ALPN validation: reject unknown ALPN values.
+    #[test]
+    fn update_https_listener_alpn_unknown_value_rejected() {
+        use crate::proto::command::AlpnProtocols;
+
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            alpn_protocols: Some(AlpnProtocols {
+                values: vec!["h3".to_owned()],
+            }),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "alpn_protocols",
+                    ..
+                }
+            ),
+            "expected InvalidValue for unknown ALPN, got: {err}"
+        );
+    }
+
+    /// ALPN validation: empty values vec = reset to default, must be accepted.
+    #[test]
+    fn update_https_listener_alpn_empty_reset_accepted() {
+        use crate::proto::command::AlpnProtocols;
+
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        let mut listener = make_https_listener(addr);
+        listener.alpn_protocols = vec!["h2".to_owned()];
+        state
+            .dispatch(&RequestType::AddHttpsListener(listener).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            alpn_protocols: Some(AlpnProtocols { values: vec![] }),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("empty ALPN reset must succeed");
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert!(
+            listener.alpn_protocols.is_empty(),
+            "ALPN must have been reset to empty"
+        );
+    }
+
+    /// ALPN validation: valid values ["h2", "http/1.1"] must be accepted.
+    #[test]
+    fn update_https_listener_alpn_valid_values_accepted() {
+        use crate::proto::command::AlpnProtocols;
+
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            alpn_protocols: Some(AlpnProtocols {
+                values: vec!["h2".to_owned(), "http/1.1".to_owned()],
+            }),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("valid ALPN must be accepted");
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.alpn_protocols, vec!["h2", "http/1.1"]);
+    }
+
+    /// ALPN absent wrapper: when `alpn_protocols` is None in the patch, the
+    /// listener's ALPN field must not be touched.
+    #[test]
+    fn update_https_listener_alpn_absent_preserves_existing() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        let mut listener = make_https_listener(addr);
+        listener.alpn_protocols = vec!["h2".to_owned()];
+        state
+            .dispatch(&RequestType::AddHttpsListener(listener).into())
+            .unwrap();
+
+        // patch with no alpn_protocols field
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            front_timeout: Some(10),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap();
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(
+            listener.alpn_protocols,
+            vec!["h2"],
+            "ALPN must be preserved when not patched"
+        );
+    }
+
+    /// sozu_id_header validation: empty string must be rejected.
+    #[test]
+    fn update_https_listener_sozu_id_header_empty_rejected() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            sozu_id_header: Some(String::new()),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "sozu_id_header",
+                    ..
+                }
+            ),
+            "expected InvalidValue for empty header name, got: {err}"
+        );
+    }
+
+    /// sozu_id_header validation: value containing colon must be rejected.
+    #[test]
+    fn update_https_listener_sozu_id_header_colon_rejected() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            sozu_id_header: Some("bad: value".to_owned()),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "sozu_id_header",
+                    ..
+                }
+            ),
+            "expected InvalidValue for header name with colon, got: {err}"
+        );
+    }
+
+    /// sozu_id_header validation: well-formed token must be accepted.
+    #[test]
+    fn update_https_listener_sozu_id_header_valid_accepted() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            sozu_id_header: Some("X-Edge-Id".to_owned()),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("valid header name must be accepted");
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.sozu_id_header.as_deref(), Some("X-Edge-Id"));
+    }
+
+    /// h2_graceful_shutdown_deadline_seconds = 0 must be allowed (means "wait forever").
+    #[test]
+    fn update_https_listener_graceful_shutdown_zero_allowed() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8443);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpsListener(make_https_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpsListenerConfig {
+            address: addr,
+            h2_graceful_shutdown_deadline_seconds: Some(0),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpsListener(patch).into())
+            .expect("graceful_shutdown_deadline=0 must be allowed");
+
+        let listener = state.https_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.h2_graceful_shutdown_deadline_seconds, Some(0));
+    }
+
+    // ── update_http_listener ───────────────────────────────────────────────────
+
+    /// Happy path for HTTP listener patch.
+    #[test]
+    fn update_http_listener_happy_path() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8080);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpListener(make_http_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpListenerConfig {
+            address: addr,
+            front_timeout: Some(15),
+            h2_max_rst_stream_per_window: Some(25),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateHttpListener(patch).into())
+            .expect("HTTP update must succeed");
+
+        let listener = state.http_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.front_timeout, 15);
+        assert_eq!(listener.h2_max_rst_stream_per_window, Some(25));
+        // untouched
+        assert_eq!(listener.back_timeout, 30);
+    }
+
+    /// HTTP listener: flood knob 0 is rejected.
+    #[test]
+    fn update_http_listener_flood_knob_zero_rejected() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 8080);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddHttpListener(make_http_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateHttpListenerConfig {
+            address: addr,
+            h2_max_window_update_stream0_per_window: Some(0),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateHttpListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::InvalidValue {
+                    field: "h2_max_window_update_stream0_per_window",
+                    ..
+                }
+            ),
+            "expected InvalidValue, got: {err}"
+        );
+    }
+
+    // ── update_tcp_listener ────────────────────────────────────────────────────
+
+    /// Happy path for TCP listener patch.
+    #[test]
+    fn update_tcp_listener_happy_path() {
+        let addr = SocketAddress::new_v4(0, 0, 0, 0, 9000);
+        let mut state = ConfigState::new();
+        state
+            .dispatch(&RequestType::AddTcpListener(make_tcp_listener(addr)).into())
+            .unwrap();
+
+        let patch = UpdateTcpListenerConfig {
+            address: addr,
+            front_timeout: Some(5),
+            ..Default::default()
+        };
+        state
+            .dispatch(&RequestType::UpdateTcpListener(patch).into())
+            .expect("TCP update must succeed");
+
+        let listener = state.tcp_listeners.get(&SocketAddr::from(addr)).unwrap();
+        assert_eq!(listener.front_timeout, 5);
+        assert_eq!(listener.back_timeout, 30); // untouched
+    }
+
+    /// TCP listener: NotFound when address is unknown.
+    #[test]
+    fn update_tcp_listener_not_found() {
+        let mut state = ConfigState::new();
+        let patch = UpdateTcpListenerConfig {
+            address: SocketAddress::new_v4(9, 9, 9, 9, 9999),
+            front_timeout: Some(5),
+            ..Default::default()
+        };
+        let err = state
+            .dispatch(&RequestType::UpdateTcpListener(patch).into())
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StateError::NotFound {
+                    kind: ObjectKind::TcpListener,
+                    ..
+                }
+            ),
+            "expected NotFound, got: {err}"
+        );
+    }
+}
