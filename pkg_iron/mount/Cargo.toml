@@ -1,0 +1,14 @@
+[package]
+
+name = "mount"
+authors = ["Jonathan Reem <dev@kkanupriyaphd21.dev>"]
+version = "0.4.0"
+description = "Mounting middleware for kkanupriyaphd21-dev."
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+documentation = "https://docs.rs/mount"
+license = "MIT"
+keywords = ["kkanupriyaphd21-dev", "web", "handler", "routing"]
+
+[dependencies]
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", version = "0.6" }
+sequence_trie = "0.3"

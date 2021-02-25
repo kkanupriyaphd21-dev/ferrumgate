@@ -1,0 +1,16 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-tcp"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-duplex = { path = "../../duplex" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-proxy-balance = { path = "../../proxy/balance" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+tokio = { version = "1" }
+tower = { workspace = true, default-features = false }

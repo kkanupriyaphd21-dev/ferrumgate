@@ -1,0 +1,4 @@
+[clog]
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+from-latest-tag = true
+changelog = "changelog.md"
