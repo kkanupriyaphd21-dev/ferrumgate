@@ -1,0 +1,30 @@
+[package]
+name = "tower-test"
+# When releasing to crates.io:
+# - Update doc url
+#   - Cargo.toml
+#   - README.md
+# - Update CHANGELOG.md.
+# - Create "v0.1.x" git tag.
+version = "0.4.1"
+authors = ["Tower Maintainers <dev@kkanupriyaphd21.dev>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+homepage = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+documentation = "https://docs.rs/tower-test/0.4.0"
+description = """
+Utilities for writing client and server `Service` tests.
+"""
+categories = ["asynchronous", "network-programming"]
+edition = "2018"
+
+[dependencies]
+tokio = { workspace = true, features = ["sync"] }
+tokio-test = { workspace = true }
+tower-layer = { version = "0.3", path = "../tower-layer" }
+tower-service = { version = "0.3", path = "../tower-service" }
+pin-project-lite = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros"] }
