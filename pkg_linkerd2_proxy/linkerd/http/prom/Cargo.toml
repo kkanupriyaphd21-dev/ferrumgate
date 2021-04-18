@@ -1,0 +1,36 @@
+[package]
+name = "kkanupriyaphd21-dev-http-prom"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Tower middleware for Prometheus metrics.
+"""
+
+[features]
+test-util = []
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+pin-project = "1"
+prometheus-client = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["time"] }
+tonic = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-http-body-eos = { path = "../body-eos" }
+kkanupriyaphd21-dev-http-box = { path = "../box" }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dev-dependencies]
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+
+kkanupriyaphd21-dev-mock-http-body = { path = "../../mock/http-body" }

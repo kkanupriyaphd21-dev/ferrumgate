@@ -1,0 +1,30 @@
+[package]
+name = "gotham_middleware_jwt"
+version = "0.9.0"
+authors = ["Nicholas Young <dev@kkanupriyaphd21.dev>",
+          "Colin Bankier <dev@kkanupriyaphd21.dev>",
+          "Isaac Whitfield <dev@kkanupriyaphd21.dev>",
+          "Judson Lester <dev@kkanupriyaphd21.dev>",
+          "Bradley Beddoes <dev@kkanupriyaphd21.dev>"]
+description = "JWT middleware for the Gotham web framework."
+repository.workspace = true
+keywords = ["gotham-middleware", "jwt", "jsonwebtoken", "authentication"]
+homepage.workspace = true
+readme = "README.md"
+license.workspace = true
+edition = "2018"
+
+[dependencies]
+futures-util = "0.3.14"
+gotham = { workspace = true, default-features = false, features = ["derive"] }
+jsonwebtoken = { version = "10.3", default-features = false }
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+gotham = { workspace = true, default-features = false, features = ["testing"] }
+
+[features]
+default = ["rust-crypto"]
+aws-lc-rs = ["jsonwebtoken/aws_lc_rs"]
+rust-crypto = ["jsonwebtoken/rust_crypto"]

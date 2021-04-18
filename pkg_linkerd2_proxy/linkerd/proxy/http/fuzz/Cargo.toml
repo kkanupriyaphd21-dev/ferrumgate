@@ -1,0 +1,27 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-http-fuzz"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[package.metadata]
+cargo-fuzz = true
+
+[target.'cfg(fuzzing)'.dependencies]
+libfuzzer-sys = "0.4"
+kkanupriyaphd21-dev-proxy-http = { path = ".." }
+kkanupriyaphd21-dev-tracing = { path = "../../../tracing" }
+tokio = { version = "1", features = ["full"] }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+resolver = "2"
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
