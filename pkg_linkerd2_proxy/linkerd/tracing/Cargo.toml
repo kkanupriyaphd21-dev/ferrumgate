@@ -1,0 +1,33 @@
+[package]
+name = "kkanupriyaphd21-dev-tracing"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+default = []
+ansi = ["tracing-subscriber/ansi"]
+stream = ["thingbuf", "slab"]
+
+[dependencies]
+kkanupriyaphd21-dev-error = { path = "../error" }
+slab = { version = "0.4", optional = true }
+thingbuf = { version = "0.1.6", features = ["std"], optional = true }
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+tracing-log = "0.2"
+
+[dependencies.tracing-subscriber]
+version = "0.3.23"
+default-features = false
+features = [
+    "env-filter",
+    "fmt",
+    "smallvec",
+    "tracing-log",
+    "json",
+    "parking_lot",
+    "registry",
+]
