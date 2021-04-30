@@ -1,0 +1,32 @@
+[package]
+name = "kkanupriyaphd21-dev-opentelemetry"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+http-body = { workspace = true }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-metrics = { path = "../metrics" }
+kkanupriyaphd21-dev-trace-context = { path = "../trace-context" }
+opentelemetry = { version = "0.31", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace"] }
+opentelemetry-proto = { version = "0.31" }
+opentelemetry-semantic-conventions = { version = "0.31", default-features = false, features = ["semconv_experimental"] }
+tonic = { workspace = true, default-features = false, features = [
+    "codegen",
+] }
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+tracing = { workspace = true }
+hex = "0.4.3"
+http-body-util = "0.1.3"
+
+[dev-dependencies]
+http = "1"
+kkanupriyaphd21-dev-tracing = { path = "../tracing" }
+tonic-prost = { workspace = true, default-features = false }
+tokio = { version = "1", features = ["test-util"] }
+tower-test = { workspace = true }
