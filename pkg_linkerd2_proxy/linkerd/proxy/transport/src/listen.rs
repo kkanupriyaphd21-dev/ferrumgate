@@ -1,0 +1,242 @@
+mod dual_bind;
+
+use crate::{addrs::*, Backlog, Keepalive, UserTimeout};
+use dual_bind::DualBind;
+use futures::prelude::*;
+use kkanupriyaphd21-dev_error::Result;
+use kkanupriyaphd21-dev_io as io;
+use kkanupriyaphd21-dev_stack::Param;
+use std::{fmt, net::SocketAddr, pin::Pin};
+use thiserror::Error;
+use tokio::net::TcpStream;
+use tokio_stream::wrappers::TcpListenerStream;
+
+/// Binds a listener, producing a stream of incoming connections.
+///
+/// Typically, this represents binding a TCP socket. However, it may also be an
+/// stream of in-memory mock connections, for testing purposes.
+pub trait Bind<T> {
+    type Io: io::AsyncRead
+        + io::AsyncWrite
+        + io::Peek
+        + io::PeerAddr
+        + fmt::Debug
+        + Unpin
+        + Send
+        + Sync
+        + 'static;
+    type Addrs: Clone + Send + Sync + 'static;
+    type BoundAddrs;
+    type Incoming: Stream<Item = Result<(Self::Addrs, Self::Io)>> + Send + Sync + 'static;
+
+    fn bind(self, params: &T) -> Result<(Self::BoundAddrs, Self::Incoming)>;
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct BindTcp(());
+
+#[derive(Clone, Debug)]
+pub struct Addrs {
+    pub server: Local<ServerAddr>,
+    pub client: Remote<ClientAddr>,
+}
+
+#[derive(Debug, Error)]
+#[error("failed to accept socket: {0}")]
+struct AcceptError(#[source] io::Error);
+
+#[derive(Debug, Error)]
+#[error("failed to set TCP keepalive: {0}")]
+struct KeepaliveError(#[source] io::Error);
+
+#[derive(Debug, Error)]
+#[error("failed to set TCP User Timeout: {0}")]
+struct UserTimeoutError(#[source] io::Error);
+
+#[derive(Debug, Error)]
+#[error("failed to obtain peer address: {0}")]
+struct PeerAddrError(#[source] io::Error);
+
+// === impl BindTcp ===
+
+impl BindTcp {
+    pub fn with_orig_dst() -> super::BindWithOrigDst<Self> {
+        super::BindWithOrigDst::from(Self::default())
+    }
+
+    pub fn dual_with_orig_dst() -> DualBind<super::BindWithOrigDst<Self>> {
+        DualBind::from(super::BindWithOrigDst::default())
+    }
+}
+
+impl<T> Bind<T> for BindTcp
+where
+    T: Param<ListenAddr> + Param<Keepalive> + Param<UserTimeout> + Param<Backlog>,
+{
+    type Addrs = Addrs;
+    type BoundAddrs = Local<ServerAddr>;
+    type Incoming = Pin<Box<dyn Stream<Item = Result<(Self::Addrs, Self::Io)>> + Send + Sync>>;
+    type Io = TcpStream;
+
+    fn bind(self, params: &T) -> Result<(Self::BoundAddrs, Self::Incoming)> {
+        let listen = {
+            let ListenAddr(addr) = params.param();
+            let Backlog(backlog) = params.param();
+
+            match backlog {
+                Some(backlog) => {
+                    // Use TcpSocket to configure a custom listen backlog.
+                    // TcpSocket::new_v4/v6 automatically sets O_NONBLOCK, which is
+                    // required for Tokio's async I/O operations.
+                    let socket = if addr.is_ipv4() {
+                        tokio::net::TcpSocket::new_v4()?
+                    } else {
+                        tokio::net::TcpSocket::new_v6()?
+                    };
+
+                    // Enable SO_REUSEADDR to match std::net::TcpListener::bind
+                    // behavior. On Windows, std does not set SO_REUSEADDR to prevent
+                    // socket hijacking.
+                    #[cfg(not(windows))]
+                    socket.set_reuseaddr(true)?;
+
+                    socket.bind(addr)?;
+                    socket.listen(backlog)?
+                }
+                None => {
+                    // No custom backlog configured; use std::net::TcpListener::bind
+                    // which applies platform-correct defaults.
+                    let l = std::net::TcpListener::bind(addr)?;
+                    l.set_nonblocking(true)?;
+                    tokio::net::TcpListener::from_std(l).expect("listener must be valid")
+                }
+            }
+        };
+        let server = Local(ServerAddr(listen.local_addr()?));
+        let Keepalive(keepalive) = params.param();
+        let UserTimeout(user_timeout) = params.param();
+        let accept = TcpListenerStream::new(listen).map(move |res| {
+            let tcp = res.map_err(AcceptError)?;
+            super::set_nodelay_or_warn(&tcp);
+            let tcp = super::set_keepalive_or_warn(tcp, keepalive).map_err(KeepaliveError)?;
+            let tcp =
+                super::set_user_timeout_or_warn(tcp, user_timeout).map_err(UserTimeoutError)?;
+
+            fn ipv4_mapped(orig: SocketAddr) -> SocketAddr {
+                if let SocketAddr::V6(v6) = orig {
+                    if let Some(ip) = v6.ip().to_ipv4_mapped() {
+                        return (ip, orig.port()).into();
+                    }
+                }
+                orig
+            }
+
+            let client_addr = tcp.peer_addr().map_err(PeerAddrError)?;
+            let client = Remote(ClientAddr(ipv4_mapped(client_addr)));
+            Ok((Addrs { server, client }, tcp))
+        });
+
+        Ok((server, Box::pin(accept)))
+    }
+}
+
+// === impl Addrs ===
+
+impl Param<Remote<ClientAddr>> for Addrs {
+    #[inline]
+    fn param(&self) -> Remote<ClientAddr> {
+        self.client
+    }
+}
+
+impl Param<Local<ServerAddr>> for Addrs {
+    #[inline]
+    fn param(&self) -> Local<ServerAddr> {
+        self.server
+    }
+}
+
+impl Param<AddrPair> for Addrs {
+    #[inline]
+    fn param(&self) -> AddrPair {
+        let Remote(client) = self.client;
+        let Local(server) = self.server;
+        AddrPair(client, server)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct TestParams {
+        addr: ListenAddr,
+        keepalive: Keepalive,
+        user_timeout: UserTimeout,
+        backlog: crate::Backlog,
+    }
+
+    impl Param<ListenAddr> for TestParams {
+        fn param(&self) -> ListenAddr {
+            self.addr
+        }
+    }
+
+    impl Param<Keepalive> for TestParams {
+        fn param(&self) -> Keepalive {
+            self.keepalive
+        }
+    }
+
+    impl Param<UserTimeout> for TestParams {
+        fn param(&self) -> UserTimeout {
+            self.user_timeout
+        }
+    }
+
+    impl Param<crate::Backlog> for TestParams {
+        fn param(&self) -> crate::Backlog {
+            self.backlog
+        }
+    }
+
+    fn params_with_backlog(backlog: Option<u32>) -> TestParams {
+        TestParams {
+            addr: ListenAddr("127.0.0.1:0".parse().unwrap()),
+            keepalive: Keepalive(None),
+            user_timeout: UserTimeout(None),
+            backlog: crate::Backlog(backlog),
+        }
+    }
+
+    #[tokio::test]
+    async fn bind_with_custom_backlog() {
+        let params = params_with_backlog(Some(1024));
+        let bind = BindTcp::default();
+        let (bound_addr, mut incoming) = bind.bind(&params).expect("failed to bind");
+
+        // Verify we can connect and accept through the listener.
+        let addr = bound_addr.0 .0;
+        let connect = tokio::net::TcpStream::connect(addr);
+        let accept = incoming.next();
+        let (conn, accepted) = tokio::join!(connect, accept);
+        conn.expect("failed to connect");
+        accepted.expect("stream ended").expect("failed to accept");
+    }
+
+    #[tokio::test]
+    async fn bind_with_default_backlog() {
+        let params = params_with_backlog(None);
+        let bind = BindTcp::default();
+        let (bound_addr, mut incoming) = bind.bind(&params).expect("failed to bind");
+
+        // Verify we can connect and accept through the listener.
+        let addr = bound_addr.0 .0;
+        let connect = tokio::net::TcpStream::connect(addr);
+        let accept = incoming.next();
+        let (conn, accepted) = tokio::join!(connect, accept);
+        conn.expect("failed to connect");
+        accepted.expect("stream ended").expect("failed to accept");
+    }
+}
