@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
+
+env:
+  MSRV: 1.64.0
+
+jobs:
+  check-stable:
+    # Run `cargo check` first to ensure that the pushed code at least compiles.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+      - name: Check
+        run: cargo check --workspace --all-features --all-targets
+
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+      - name: cargo doc
+        env:
+          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+        run: cargo doc --all-features --no-deps
+
+  check-msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: "install Rust ${{ env.MSRV }}"
+        uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        with:
+          toolchain: ${{ env.MSRV }}
+      - name: "install Rust nightly"
+        uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+      - name: Select minimal versions
+        run: |
+          cargo update -Z minimal-versions
+          cargo update -p lazy_static --precise 1.5.0
+      - name: Check
+        run: |
+          rustup default ${{ env.MSRV }}
+          cargo check --all --all-targets --all-features --locked
+
+  cargo-hack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+      - name: install cargo-hack
+        uses: taiki-e/install-action@kkanupriya
+      - name: cargo hack check
+        run: cargo hack check --each-feature --no-dev-deps --workspace
+
+  test-versions:
+    # Test against the stable, beta, and nightly Rust toolchains on ubuntu-latest.
+    needs: check-stable
+    runs-on: ubuntu-latest
+    strategy:
+      # Disable fail-fast. If the test run for a particular Rust version fails,
+      # don't cancel the other test runs, so that we can determine whether a
+      # failure only occurs on a particular version.
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, nightly]
+    steps:
+      - uses: actions/checkout@v6
+      - name: "install Rust ${{ matrix.rust }}"
+        uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+  style:
+    needs: check-stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        with:
+          components: rustfmt
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+  deny-check:
+    name: cargo-deny check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
