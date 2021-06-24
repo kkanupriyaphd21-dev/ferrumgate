@@ -1,0 +1,15 @@
+[package]
+name = "kkanupriyaphd21-dev-duplex"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false }
+tokio = { version = "1", features = ["io-util"] }
+pin-project = "1"
+tracing = { workspace = true }
+kkanupriyaphd21-dev-io = { path = "../io" }
