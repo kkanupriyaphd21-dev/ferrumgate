@@ -1,0 +1,16 @@
+[package]
+name = "logger"
+version = "0.4.0"
+authors = ["Alexander Irbis <dev@kkanupriyaphd21.dev>", "Jonathan Reem <dev@kkanupriyaphd21.dev>", "Michael Reinhard <dev@kkanupriyaphd21.dev>"]
+description = "Logging middleware for the kkanupriyaphd21-dev framework."
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+keywords = ["kkanupriyaphd21-dev", "web", "logger", "log", "timer"]
+license = "MIT"
+
+[dependencies]
+kkanupriyaphd21-dev = { version = ">=0.4,<0.8.0", default-features = false }
+log = "0.4.8"
+time = "0.1.42"
+
+[dev-dependencies]
+env_logger = "0.7.1"
