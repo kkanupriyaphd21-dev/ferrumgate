@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "examples",
+    "kkanupriyaphd21-dev",
+    "logger",
+    "mount",
+    "persistent",
+    "router",
+]
