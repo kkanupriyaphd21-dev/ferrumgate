@@ -1,0 +1,66 @@
+name: rust-toolchain
+
+on:
+  pull_request:
+    paths:
+      - rust-toolchain
+      - "**Dockerfile"
+      - ".github/workflows/*"
+      - ".github/**/Dockerfile"
+
+permissions:
+  contents: read
+
+jobs:
+  devcontainer:
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    container: ghcr.io/kkanupriyaphd21-dev/dev:v48-rust
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - run: git config --global --add safe.directory "$PWD" # actions/runner#2033
+      - run: |
+          VERSION_REGEX='channel = "([0-9]+\.[0-9]+\.[0-9]+)"'
+          TOOLCHAIN=$(cat rust-toolchain.toml)
+          if [[ $TOOLCHAIN =~ $VERSION_REGEX ]]; then
+            VERSION=${BASH_REMATCH[1]}
+            if [ "$(cargo --version | cut -d' ' -f2)" != "$VERSION" ]; then
+              echo "::error file=rust-toolchain.toml::rust-toolchain channel '$VERSION' does not match devcontainer '$(cargo --version)'"
+              exit 1
+            fi
+          else
+            echo "::error file=rust-toolchain.toml::failed to parse rust-toolchain.toml"
+            exit 1
+          fi
+        shell: bash
+
+
+  workflows:
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: kkanupriyaphd21-dev/dev/actions/setup-tools@kkanupriya
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - shell: bash
+        run: |
+          VERSION_REGEX='channel = "([0-9]+\.[0-9]+\.[0-9]+)"'
+          TOOLCHAIN=$(cat rust-toolchain.toml)
+          if [[ $TOOLCHAIN =~ $VERSION_REGEX ]]; then
+            VERSION=${BASH_REMATCH[1]}
+          else
+            echo "::error file=rust-toolchain.toml::failed to parse rust-toolchain.toml"
+            exit 1
+          fi
+
+          ex=0
+          while IFS= read -r file ; do
+            while IFS= read -r image ; do
+              if [[ "$image" =~ ^docker://(docker.io/library/)?rust: ]]; then
+                tag="${image##*rust:}"
+                v="${tag%%-*}"
+                if [[ "$v" != "$VERSION" ]]; then
+                  echo "::warning file=$file::$file uses incorrect rust version: '$v' (rust-toolchain.toml contains '$VERSION')"
+                  ex=$((ex + 1))
+                fi
+              fi
+            done < <(yq '.jobs[] | select(.container) | .container.image // .container' "$file")
+          done < <(find .github/workflows -name '*.yml')
+          exit $ex

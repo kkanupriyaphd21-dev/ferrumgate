@@ -1,0 +1,20 @@
+[package]
+name = "kkanupriyaphd21-dev-tonic-stream"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+pin-project = "1"
+tonic = { workspace = true, default-features = false }
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "test-util"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+kkanupriyaphd21-dev-tracing = { path = "../tracing" }
