@@ -1,0 +1,17 @@
+[package]
+name = "kkanupriyaphd21-dev-http-box"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+pin-project = "1"
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }

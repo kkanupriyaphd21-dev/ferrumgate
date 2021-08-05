@@ -1,0 +1,13 @@
+[package]
+name = "gotham_examples_session_custom_data_type"
+description = "Storing and retrieving session data with a custom data type, in a type safe way, with the Gotham web framework."
+version = "0.0.0"
+authors = ["Daniel Wagner-Hall <dev@kkanupriyaphd21.dev>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true
+
+serde = { version = "1.0", features = ["derive"] }
+time = { version = "0.3.0", features = ["formatting", "local-offset"] }
