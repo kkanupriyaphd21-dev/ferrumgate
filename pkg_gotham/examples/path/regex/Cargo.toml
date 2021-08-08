@@ -1,0 +1,10 @@
+[package]
+name = "gotham_examples_path_regex"
+description = "Shows how to match against Regex patterns in path segments."
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[dependencies]
+gotham.workspace = true
+serde = { version = "1.0", features = ["derive"] }
