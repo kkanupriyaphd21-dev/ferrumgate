@@ -1,0 +1,16 @@
+[package]
+name = "kkanupriyaphd21-dev-addr"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+http = { workspace = true }
+ipnet = "2.11"
+kkanupriyaphd21-dev-dns-name = { path = "../dns/name" }
+thiserror = "2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
