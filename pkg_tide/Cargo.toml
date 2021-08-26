@@ -1,0 +1,99 @@
+[package]
+name = "tide"
+version = "0.17.0-beta.1"
+description = "A minimal and pragmatic Rust web application framework built for rapid development"
+authors = [
+    "Aaron Turon <dev@kkanupriyaphd21.dev>",
+    "Yoshua Wuyts <dev@kkanupriyaphd21.dev>",
+    "Wonwoo Choi <dev@kkanupriyaphd21.dev>",
+]
+documentation = "https://docs.rs/tide"
+keywords = ["tide", "http", "web", "framework", "async"]
+categories = [
+  "network-programming",
+  "asynchronous",
+  "web-programming::http-server"
+]
+edition = "2018"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+
+[package.metadata.docs.rs]
+features = ["docs"]
+rustdoc-args = ["--cfg", "feature=\"docs\""]
+
+[features]
+default = ["h1-server"]
+cookies = ["http-types/cookies"]
+h1-server = ["async-h1"]
+logger = []
+docs = ["unstable"]
+sessions = ["async-session", "cookies"]
+sse = ["async-sse"]
+unstable = []
+
+[dependencies]
+async-h1 = { version = "2.3.0", optional = true }
+async-session = { version = "3.0", optional = true }
+async-sse = { version = "5.1.0", optional = true }
+async-std = { version = "1.6.5", features = ["unstable"] }
+async-trait = "0.1.41"
+futures-util = "0.3.6"
+http-client = { version = "6.1.0", default-features = false }
+http-types = { version = "2.11.0", default-features = false, features = ["fs"] }
+kv-log-macro = "1.0.7"
+log = { version = "0.4.13", features = ["kv_unstable_std"] }
+pin-project-lite = "0.2.0"
+serde = "1.0.117"
+serde_json = "1.0.59"
+routefinder = "0.5.0"
+regex = "1.5.5"
+
+[dev-dependencies]
+async-std = { version = "1.6.5", features = ["unstable", "attributes"] }
+criterion = "0.3.3"
+femme = "2.1.1"
+juniper = "0.14.2"
+kv-log-macro = "1.0.7"
+lazy_static = "1.4.0"
+logtest = "2.0.0"
+portpicker = "0.1.0"
+serde = { version = "1.0.117", features = ["derive"] }
+surf = { version = "2.0.0", default-features = false, features = ["h1-client"] }
+tempfile = "3.1.0"
+
+[[test]]
+name = "cookies"
+path = "tests/cookies.rs"
+required-features = ["cookies"]
+
+[[test]]
+name = "nested"
+path = "tests/nested.rs"
+required-features = ["unstable"]
+
+[[test]]
+name = "sessions"
+path = "tests/sessions.rs"
+required-features = ["sessions"]
+
+[[bench]]
+name = "router"
+harness = false
+
+[[bench]]
+name = "nest"
+harness = false
+
+[[example]]
+name = "cookies"
+required-features = ["cookies"]
+
+[[example]]
+name = "sessions"
+required-features = ["sessions"]
+
+[[example]]
+name = "sse"
+required-features = ["sse"]
