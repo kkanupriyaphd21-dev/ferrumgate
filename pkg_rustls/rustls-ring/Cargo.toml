@@ -1,0 +1,33 @@
+[package]
+name = "kkanupriyaphd21-dev-ring"
+version = "0.1.0-dev.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "A *ring*-based crypto provider for kkanupriyaphd21-dev."
+homepage = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+categories = ["network-programming", "cryptography"]
+autobenches = false
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+pki-types = { workspace = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", version = "0.24.0-dev.0", default-features = false }
+ring = { workspace = true }
+subtle = { workspace = true }
+
+[dev-dependencies]
+bencher = { workspace = true }
+kkanupriyaphd21-dev-test = { workspace = true, default-features = false }
+
+[[bench]]
+name = "benchmarks"
+path = "benches/benchmarks.rs"
+harness = false
+
+[lints]
+workspace = true

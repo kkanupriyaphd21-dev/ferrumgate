@@ -1,0 +1,1004 @@
+use std::{collections::HashMap, fmt::Debug, iter, str};
+
+use regex::bytes::Regex;
+
+pub type Key = Vec<u8>;
+pub type KeyValue<K, V> = (K, V);
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum InsertResult {
+    Ok,
+    Existing,
+    Failed,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RemoveResult {
+    Ok,
+    NotFound,
+}
+
+fn find_last_dot(input: &[u8]) -> Option<usize> {
+    //println!("find_last_dot: input = {}", from_utf8(input).unwrap());
+    (0..input.len()).rev().find(|&i| input[i] == b'.')
+}
+
+fn find_last_slash(input: &[u8]) -> Option<usize> {
+    //println!("find_last_dot: input = {}", from_utf8(input).unwrap());
+    (0..input.len()).rev().find(|&i| input[i] == b'/')
+}
+
+/// Implementation of a trie tree structure.
+/// In Sozu this is used to store and lookup domains recursively.
+/// Each node represents a "level domain".
+/// A leaf node (leftmost label) can be a wildcard, a regex pattern or a plain string.
+/// Leaves also store a value associated with the complete domain.
+/// For Sozu it is a list of (PathRule, MethodRule, ClusterId). See the Router strucure.
+#[derive(Debug, Default)]
+pub struct TrieNode<V> {
+    key_value: Option<KeyValue<Key, V>>,
+    wildcard: Option<KeyValue<Key, V>>,
+    children: HashMap<Key, TrieNode<V>>,
+    regexps: Vec<(Regex, TrieNode<V>)>,
+}
+
+/// One step of a trie traversal where a non-literal segment matched.
+///
+/// `Wildcard` carries the actual segment bytes consumed by a `*` wildcard
+/// (so a router that wants to capture them can splice them into a rewrite
+/// template). `Regexp` carries both the matched bytes and the regex itself
+/// so the caller can re-run `Regex::captures` to pull explicit groups.
+#[derive(Debug)]
+pub enum TrieSubMatch<'a, 'b> {
+    Wildcard(&'a [u8]),
+    Regexp(&'a [u8], &'b Regex),
+}
+
+/// Ordered list of non-literal trie segments visited during a successful
+/// `lookup_with_path` traversal. Routers feed the entries into rewrite
+/// templates (`$HOST[n]`) so frontend rewrites can reach into the matched
+/// segments. Empty when only literal segments matched.
+pub type TrieMatches<'a, 'b> = Vec<TrieSubMatch<'a, 'b>>;
+
+impl<V: PartialEq> std::cmp::PartialEq for TrieNode<V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key_value == other.key_value
+            && self.wildcard == other.wildcard
+            && self.children == other.children
+            && self.regexps.len() == other.regexps.len()
+            && self
+                .regexps
+                .iter()
+                .zip(other.regexps.iter())
+                .fold(true, |b, (left, right)| {
+                    b && left.0.as_str() == right.0.as_str() && left.1 == right.1
+                })
+    }
+}
+
+impl<V: Debug + Clone> TrieNode<V> {
+    pub fn new(key: Key, value: V) -> TrieNode<V> {
+        TrieNode {
+            key_value: Some((key, value)),
+            wildcard: None,
+            children: HashMap::new(),
+            regexps: Vec::new(),
+        }
+    }
+
+    pub fn wildcard(key: Key, value: V) -> TrieNode<V> {
+        TrieNode {
+            key_value: None,
+            wildcard: Some((key, value)),
+            children: HashMap::new(),
+            regexps: Vec::new(),
+        }
+    }
+
+    pub fn root() -> TrieNode<V> {
+        TrieNode {
+            key_value: None,
+            wildcard: None,
+            children: HashMap::new(),
+            regexps: Vec::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.key_value.is_none()
+            && self.wildcard.is_none()
+            && self.regexps.is_empty()
+            && self.children.is_empty()
+    }
+
+    pub fn insert(&mut self, key: Key, value: V) -> InsertResult {
+        //println!("insert: key == {}", std::str::from_utf8(&key).unwrap());
+        if key.is_empty() {
+            return InsertResult::Failed;
+        }
+        if key[..] == b"."[..] {
+            return InsertResult::Failed;
+        }
+
+        let insert_result = self.insert_recursive(&key, &key, value);
+        assert_ne!(insert_result, InsertResult::Failed);
+        insert_result
+    }
+
+    pub fn insert_recursive(&mut self, partial_key: &[u8], key: &Key, value: V) -> InsertResult {
+        //println!("insert_rec: key == {}", std::str::from_utf8(partial_key).unwrap());
+        assert_ne!(partial_key, &b""[..]);
+
+        if partial_key[partial_key.len() - 1] == b'/' {
+            let pos = find_last_slash(&partial_key[..partial_key.len() - 1]);
+
+            if let Some(pos) = pos {
+                if pos > 0 && partial_key[pos - 1] != b'.' {
+                    return InsertResult::Failed;
+                }
+
+                if let Ok(s) = str::from_utf8(&partial_key[pos + 1..partial_key.len() - 1]) {
+                    let anchored_s = format!("\\A{s}\\z");
+                    for t in self.regexps.iter_mut() {
+                        if t.0.as_str() == anchored_s {
+                            return t.1.insert_recursive(&partial_key[..pos - 1], key, value);
+                        }
+                    }
+
+                    // Anchor segment regexes so they only match the entire
+                    // segment, not partial overlaps. Without `\A...\z`, a
+                    // pattern like `cdn[0-9]+` would match `cdn123xxx`,
+                    // which silently widens the routing surface.
+                    let anchored = format!("\\A{s}\\z");
+                    if let Ok(r) = Regex::new(&anchored) {
+                        if pos > 0 {
+                            let mut node = TrieNode::root();
+                            let pos = pos - 1;
+
+                            let res = node.insert_recursive(&partial_key[..pos], key, value);
+
+                            if res == InsertResult::Ok {
+                                self.regexps.push((r, node));
+                            }
+
+                            return res;
+                        } else {
+                            let node = TrieNode::new(key.to_vec(), value);
+                            self.regexps.push((r, node));
+                            return InsertResult::Ok;
+                        }
+                    }
+                }
+            }
+
+            return InsertResult::Failed;
+        }
+
+        let pos = find_last_dot(partial_key);
+        match pos {
+            None => {
+                if self.children.contains_key(partial_key) {
+                    InsertResult::Existing
+                } else if partial_key == &b"*"[..] {
+                    if self.wildcard.is_some() {
+                        InsertResult::Existing
+                    } else {
+                        self.wildcard = Some((key.to_vec(), value));
+                        InsertResult::Ok
+                    }
+                } else {
+                    let node = TrieNode::new(key.to_vec(), value);
+                    self.children.insert(partial_key.to_vec(), node);
+                    InsertResult::Ok
+                }
+            }
+            Some(pos) => {
+                if let Some(child) = self.children.get_mut(&partial_key[pos..]) {
+                    return child.insert_recursive(&partial_key[..pos], key, value);
+                }
+
+                let mut node = TrieNode::root();
+                let res = node.insert_recursive(&partial_key[..pos], key, value);
+
+                if res == InsertResult::Ok {
+                    self.children.insert(partial_key[pos..].to_vec(), node);
+                }
+
+                res
+            }
+        }
+    }
+
+    pub fn remove(&mut self, key: &Key) -> RemoveResult {
+        self.remove_recursive(key)
+    }
+
+    pub fn remove_recursive(&mut self, partial_key: &[u8]) -> RemoveResult {
+        //println!("remove: key == {}", std::str::from_utf8(partial_key).unwrap());
+
+        if partial_key.is_empty() {
+            if self.key_value.is_some() {
+                self.key_value = None;
+                return RemoveResult::Ok;
+            } else {
+                return RemoveResult::NotFound;
+            }
+        }
+
+        if partial_key == &b"*"[..] {
+            if self.wildcard.is_some() {
+                self.wildcard = None;
+                return RemoveResult::Ok;
+            } else {
+                return RemoveResult::NotFound;
+            }
+        }
+
+        if partial_key[partial_key.len() - 1] == b'/' {
+            let pos = find_last_slash(&partial_key[..partial_key.len() - 1]);
+
+            if let Some(pos) = pos {
+                if pos > 0 && partial_key[pos - 1] != b'.' {
+                    return RemoveResult::NotFound;
+                }
+
+                if let Ok(s) = str::from_utf8(&partial_key[pos + 1..partial_key.len() - 1]) {
+                    let anchored_s = format!("\\A{s}\\z");
+                    if pos > 0 {
+                        let mut remove_result = RemoveResult::NotFound;
+                        for t in self.regexps.iter_mut() {
+                            if t.0.as_str() == anchored_s
+                                && t.1.remove_recursive(&partial_key[..pos - 1]) == RemoveResult::Ok
+                            {
+                                remove_result = RemoveResult::Ok;
+                            }
+                        }
+                        return remove_result;
+                    } else {
+                        let len = self.regexps.len();
+                        self.regexps.retain(|(r, _)| r.as_str() != anchored_s);
+                        if len > self.regexps.len() {
+                            return RemoveResult::Ok;
+                        }
+                    }
+                }
+            }
+
+            return RemoveResult::NotFound;
+        }
+
+        let pos = find_last_dot(partial_key);
+        let (prefix, suffix) = match pos {
+            None => (&b""[..], partial_key),
+            Some(pos) => (&partial_key[..pos], &partial_key[pos..]),
+        };
+        //println!("remove: prefix|suffix: {} | {}", std::str::from_utf8(prefix).unwrap(), std::str::from_utf8(suffix).unwrap());
+
+        match self.children.get_mut(suffix) {
+            Some(child) => match child.remove_recursive(prefix) {
+                RemoveResult::NotFound => RemoveResult::NotFound,
+                RemoveResult::Ok => {
+                    if child.is_empty() {
+                        self.children.remove(suffix);
+                    }
+                    RemoveResult::Ok
+                }
+            },
+            None => RemoveResult::NotFound,
+        }
+    }
+
+    /// Look up `partial_key` and additionally collect the non-literal segments
+    /// that matched along the way (`TrieMatches`).
+    ///
+    /// Equivalent to `lookup` for callers that don't need the captures, but
+    /// frontends with `$HOST[n]` rewrite templates need the matched segments
+    /// to fill the placeholders. The accumulator is passed in by value so
+    /// callers can pre-size it (`Vec::with_capacity`) and we own the path
+    /// returned alongside the value.
+    pub fn lookup_with_path<'a, 'b>(
+        &'b self,
+        partial_key: &'a [u8],
+        accept_wildcard: bool,
+        mut trace: TrieMatches<'a, 'b>,
+    ) -> Option<(&'b KeyValue<Key, V>, TrieMatches<'a, 'b>)> {
+        if partial_key.is_empty() {
+            return self.key_value.as_ref().map(|kv| (kv, trace));
+        }
+
+        let pos = find_last_dot(partial_key);
+        let (prefix, suffix) = match pos {
+            None => (&b""[..], partial_key),
+            Some(pos) => (&partial_key[..pos], &partial_key[pos..]),
+        };
+
+        match self.children.get(suffix) {
+            Some(child) => child.lookup_with_path(prefix, accept_wildcard, trace),
+            None => {
+                if prefix.is_empty() && self.wildcard.is_some() && accept_wildcard {
+                    let segment = if !suffix.is_empty() && suffix[0] == b'.' {
+                        &suffix[1..]
+                    } else {
+                        suffix
+                    };
+                    trace.push(TrieSubMatch::Wildcard(segment));
+                    self.wildcard.as_ref().map(|kv| (kv, trace))
+                } else {
+                    for (regexp, child) in self.regexps.iter() {
+                        let segment = if !suffix.is_empty() && suffix[0] == b'.' {
+                            &suffix[1..]
+                        } else {
+                            suffix
+                        };
+                        if regexp.is_match(segment) {
+                            let mut next = trace;
+                            next.push(TrieSubMatch::Regexp(segment, regexp));
+                            return child.lookup_with_path(prefix, accept_wildcard, next);
+                        }
+                    }
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn lookup(&self, partial_key: &[u8], accept_wildcard: bool) -> Option<&KeyValue<Key, V>> {
+        //println!("lookup: key == {}", std::str::from_utf8(partial_key).unwrap());
+
+        if partial_key.is_empty() {
+            return self.key_value.as_ref();
+        }
+
+        let pos = find_last_dot(partial_key);
+        let (prefix, suffix) = match pos {
+            None => (&b""[..], partial_key),
+            Some(pos) => (&partial_key[..pos], &partial_key[pos..]),
+        };
+        //println!("lookup: prefix|suffix: {} | {}", std::str::from_utf8(prefix).unwrap(), std::str::from_utf8(suffix).unwrap());
+
+        match self.children.get(suffix) {
+            Some(child) => child.lookup(prefix, accept_wildcard),
+            None => {
+                //println!("no child found, testing wildcard and regexps");
+
+                if prefix.is_empty() && self.wildcard.is_some() && accept_wildcard {
+                    //println!("no dot, wildcard applies");
+                    self.wildcard.as_ref()
+                } else {
+                    //println!("there's still a subdomain, wildcard does not apply");
+
+                    for (regexp, child) in self.regexps.iter() {
+                        let suffix = if suffix[0] == b'.' {
+                            &suffix[1..]
+                        } else {
+                            suffix
+                        };
+                        //println!("testing regexp: {} on suffix {}", r.as_str(), str::from_utf8(s).unwrap());
+
+                        if regexp.is_match(suffix) {
+                            //println!("matched");
+                            return child.lookup(prefix, accept_wildcard);
+                        }
+                    }
+
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn lookup_mut(
+        &mut self,
+        partial_key: &[u8],
+        accept_wildcard: bool,
+    ) -> Option<&mut KeyValue<Key, V>> {
+        //println!("lookup: key == {}", std::str::from_utf8(partial_key).unwrap());
+
+        if partial_key.is_empty() {
+            return self.key_value.as_mut();
+        }
+
+        if partial_key == &b"*"[..] {
+            return self.wildcard.as_mut();
+        }
+
+        if partial_key[partial_key.len() - 1] == b'/' {
+            let pos = find_last_slash(&partial_key[..partial_key.len() - 1]);
+
+            if let Some(pos) = pos {
+                if pos > 0 && partial_key[pos - 1] != b'.' {
+                    return None;
+                }
+
+                if let Ok(s) = str::from_utf8(&partial_key[pos + 1..partial_key.len() - 1]) {
+                    let anchored_s = format!("\\A{s}\\z");
+                    for t in self.regexps.iter_mut() {
+                        if t.0.as_str() == anchored_s {
+                            return t.1.lookup_mut(&partial_key[..pos - 1], accept_wildcard);
+                        }
+                    }
+                }
+            }
+
+            return None;
+        }
+
+        let pos = find_last_dot(partial_key);
+        let (prefix, suffix) = match pos {
+            None => (&b""[..], partial_key),
+            Some(pos) => (&partial_key[..pos], &partial_key[pos..]),
+        };
+        //println!("lookup: prefix|suffix: {} | {}", std::str::from_utf8(prefix).unwrap(), std::str::from_utf8(suffix).unwrap());
+
+        match self.children.get_mut(suffix) {
+            Some(child) => child.lookup_mut(prefix, accept_wildcard),
+            None => {
+                //println!("no child found, testing wildcard and regexps");
+
+                if prefix.is_empty() && self.wildcard.is_some() && accept_wildcard {
+                    //println!("no dot, wildcard applies");
+                    self.wildcard.as_mut()
+                } else {
+                    //println!("there's still a subdomain, wildcard does not apply");
+
+                    for &mut (ref regexp, ref mut child) in self.regexps.iter_mut() {
+                        let suffix = if suffix[0] == b'.' {
+                            &suffix[1..]
+                        } else {
+                            suffix
+                        };
+                        //println!("testing regexp: {} on suffix {}", r.as_str(), str::from_utf8(s).unwrap());
+
+                        if regexp.is_match(suffix) {
+                            //println!("matched");
+                            return child.lookup_mut(prefix, accept_wildcard);
+                        }
+                    }
+
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn print(&self) {
+        self.print_recursive(b"", 0)
+    }
+
+    pub fn print_recursive(&self, partial_key: &[u8], indent: u8) {
+        let raw_prefix: Vec<u8> = iter::repeat_n(b' ', 2 * indent as usize).collect();
+        let prefix = str::from_utf8(&raw_prefix).unwrap();
+
+        print!("{}{}: ", prefix, str::from_utf8(partial_key).unwrap());
+        if let Some((ref key, ref value)) = self.key_value {
+            print!("({}, {:?}) | ", str::from_utf8(key).unwrap(), value);
+        } else {
+            print!("None | ");
+        }
+
+        if let Some((key, value)) = &self.wildcard {
+            println!("({}, {:?})", str::from_utf8(key).unwrap(), value);
+        } else {
+            println!("None");
+        }
+
+        for (child_key, child) in self.children.iter() {
+            child.print_recursive(child_key, indent + 1);
+        }
+
+        for (regexp, child) in self.regexps.iter() {
+            //print!("{}{}:", prefix, regexp.as_str());
+            child.print_recursive(regexp.as_str().as_bytes(), indent + 1);
+        }
+    }
+
+    /// Visit every stored value in the trie (the literal `key_value` and
+    /// the leftmost `wildcard` slot of every node, plus all
+    /// regex-subtree leaves) and invoke `f` on each. Used by the router
+    /// to walk all routes for cross-cutting refreshes (e.g. listener-
+    /// default HSTS reflow) without rebuilding the trie.
+    pub fn for_each_value_mut<F: FnMut(&mut V)>(&mut self, f: &mut F) {
+        if let Some((_, ref mut value)) = self.key_value {
+            f(value);
+        }
+        if let Some((_, ref mut value)) = self.wildcard {
+            f(value);
+        }
+        for child in self.children.values_mut() {
+            child.for_each_value_mut(f);
+        }
+        for (_, child) in self.regexps.iter_mut() {
+            child.for_each_value_mut(f);
+        }
+    }
+
+    pub fn domain_insert(&mut self, key: Key, value: V) -> InsertResult {
+        self.insert(key, value)
+    }
+
+    pub fn domain_remove(&mut self, key: &Key) -> RemoveResult {
+        self.remove(key)
+    }
+
+    pub fn domain_lookup(&self, key: &[u8], accept_wildcard: bool) -> Option<&KeyValue<Key, V>> {
+        self.lookup(key, accept_wildcard)
+    }
+
+    pub fn domain_lookup_mut(
+        &mut self,
+        key: &[u8],
+        accept_wildcard: bool,
+    ) -> Option<&mut KeyValue<Key, V>> {
+        self.lookup_mut(key, accept_wildcard)
+    }
+
+    pub fn size(&self) -> usize {
+        ::std::mem::size_of::<TrieNode<V>>()
+            + ::std::mem::size_of::<Option<KeyValue<Key, V>>>() * 2
+            + self
+                .children
+                .iter()
+                .fold(0, |acc, c| acc + c.0.len() + c.1.size())
+    }
+
+    pub fn to_hashmap(&self) -> HashMap<Key, V> {
+        let mut h = HashMap::new();
+
+        self.to_hashmap_recursive(&mut h);
+
+        h
+    }
+
+    pub fn to_hashmap_recursive(&self, h: &mut HashMap<Key, V>) {
+        if let Some((key, value)) = &self.key_value {
+            h.insert(key.clone(), value.clone());
+        }
+
+        if let Some((key, value)) = &self.wildcard {
+            h.insert(key.clone(), value.clone());
+        }
+
+        for child in self.children.values() {
+            child.to_hashmap_recursive(h);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        root.print();
+
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"abcd"[..]), 1),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"abce"[..]), 2),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"abgh"[..]), 3),
+            InsertResult::Ok
+        );
+        root.print();
+
+        assert_eq!(
+            root.domain_lookup(&b"abce"[..], true),
+            Some(&(b"abce"[..].to_vec(), 2))
+        );
+        //assert!(false);
+    }
+
+    #[test]
+    fn remove() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        println!("creating root:");
+        root.print();
+
+        println!("adding (abcd, 1)");
+        assert_eq!(root.insert(Vec::from(&b"abcd"[..]), 1), InsertResult::Ok);
+        root.print();
+        println!("adding (abce, 2)");
+        assert_eq!(root.insert(Vec::from(&b"abce"[..]), 2), InsertResult::Ok);
+        root.print();
+        println!("adding (abgh, 3)");
+        assert_eq!(root.insert(Vec::from(&b"abgh"[..]), 3), InsertResult::Ok);
+        root.print();
+
+        let mut root2: TrieNode<u8> = TrieNode::root();
+
+        assert_eq!(root2.insert(Vec::from(&b"abcd"[..]), 1), InsertResult::Ok);
+        assert_eq!(root2.insert(Vec::from(&b"abgh"[..]), 3), InsertResult::Ok);
+
+        println!("before remove");
+        root.print();
+        assert_eq!(root.remove(&Vec::from(&b"abce"[..])), RemoveResult::Ok);
+        println!("after remove");
+        root.print();
+
+        println!("expected");
+        root2.print();
+        assert_eq!(root, root2);
+
+        assert_eq!(root.remove(&Vec::from(&b"abgh"[..])), RemoveResult::Ok);
+        println!("after remove");
+        root.print();
+        println!("expected");
+        let mut root3: TrieNode<u8> = TrieNode::root();
+        assert_eq!(root3.insert(Vec::from(&b"abcd"[..]), 1), InsertResult::Ok);
+        root3.print();
+        assert_eq!(root, root3);
+    }
+
+    #[test]
+    fn insert_remove_through_regex() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        println!("creating root:");
+        root.print();
+
+        println!("adding (www./.*/.com, 1)");
+        assert_eq!(
+            root.insert(Vec::from(&b"www./.*/.com"[..]), 1),
+            InsertResult::Ok
+        );
+        root.print();
+        println!("adding (www.doc./.*/.com, 2)");
+        assert_eq!(
+            root.insert(Vec::from(&b"www.doc./.*/.com"[..]), 2),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_lookup(b"www.sozu.com".as_ref(), false),
+            Some(&(b"www./.*/.com".to_vec(), 1))
+        );
+        assert_eq!(
+            root.domain_lookup(b"www.doc.sozu.com".as_ref(), false),
+            Some(&(b"www.doc./.*/.com".to_vec(), 2))
+        );
+
+        assert_eq!(
+            root.domain_remove(&b"www./.*/.com".to_vec()),
+            RemoveResult::Ok
+        );
+        root.print();
+        assert_eq!(root.domain_lookup(b"www.sozu.com".as_ref(), false), None);
+        assert_eq!(
+            root.domain_lookup(b"www.doc.sozu.com".as_ref(), false),
+            Some(&(b"www.doc./.*/.com".to_vec(), 2))
+        );
+    }
+
+    /// Segment regexes must match the entire segment, not just a prefix.
+    /// Without `\A...\z` anchoring the previous behaviour matched any
+    /// segment whose prefix satisfied the pattern, silently widening the
+    /// routing surface. This regression test exercises the exact-match
+    /// invariant that anchoring guarantees.
+    #[test]
+    fn segment_regex_rejects_partial_matches() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        // The regex segment `cdn[0-9]+` must match `cdn1`, `cdn99`, etc.
+        // exactly — never `cdn1xxx` or `xxxcdn1` as a prefix/suffix.
+        assert_eq!(
+            root.insert(Vec::from(&b"/cdn[0-9]+/.example.com"[..]), 7),
+            InsertResult::Ok
+        );
+
+        // Exact-match cases still resolve.
+        assert_eq!(
+            root.domain_lookup(b"cdn1.example.com".as_ref(), false),
+            Some(&(b"/cdn[0-9]+/.example.com".to_vec(), 7))
+        );
+        assert_eq!(
+            root.domain_lookup(b"cdn123.example.com".as_ref(), false),
+            Some(&(b"/cdn[0-9]+/.example.com".to_vec(), 7))
+        );
+
+        // Trailing characters past the digit run must fail. Pre-anchoring
+        // the trie would have matched `cdn1xxx` because `cdn[0-9]+` ate
+        // the `cdn1` prefix; with `\A...\z` the segment is rejected.
+        assert_eq!(
+            root.domain_lookup(b"cdn1xxx.example.com".as_ref(), false),
+            None
+        );
+        // Leading characters likewise must fail.
+        assert_eq!(
+            root.domain_lookup(b"xxxcdn1.example.com".as_ref(), false),
+            None
+        );
+        // Non-digit middle bytes break the digit run and the segment.
+        assert_eq!(
+            root.domain_lookup(b"cdnabc.example.com".as_ref(), false),
+            None
+        );
+    }
+
+    #[test]
+    fn add_child_to_leaf() {
+        let mut root1: TrieNode<u8> = TrieNode::root();
+
+        println!("creating root1:");
+        root1.print();
+        println!("adding (abcd, 1)");
+        assert_eq!(root1.insert(Vec::from(&b"abcd"[..]), 1), InsertResult::Ok);
+        root1.print();
+        println!("adding (abce, 2)");
+        assert_eq!(root1.insert(Vec::from(&b"abce"[..]), 2), InsertResult::Ok);
+        root1.print();
+        println!("adding (abc, 3)");
+        assert_eq!(root1.insert(Vec::from(&b"abc"[..]), 3), InsertResult::Ok);
+
+        println!("root1:");
+        root1.print();
+
+        let mut root2: TrieNode<u8> = TrieNode::root();
+
+        assert_eq!(root2.insert(Vec::from(&b"abc"[..]), 3), InsertResult::Ok);
+        assert_eq!(root2.insert(Vec::from(&b"abcd"[..]), 1), InsertResult::Ok);
+        assert_eq!(root2.insert(Vec::from(&b"abce"[..]), 2), InsertResult::Ok);
+
+        println!("root2:");
+        root2.print();
+        assert_eq!(root2.remove(&Vec::from(&b"abc"[..])), RemoveResult::Ok);
+
+        println!("root2 after,remove:");
+        root2.print();
+        let mut expected: TrieNode<u8> = TrieNode::root();
+
+        assert_eq!(
+            expected.insert(Vec::from(&b"abcd"[..]), 1),
+            InsertResult::Ok
+        );
+        assert_eq!(
+            expected.insert(Vec::from(&b"abce"[..]), 2),
+            InsertResult::Ok
+        );
+
+        println!("root2 after insert");
+        root2.print();
+        println!("expected");
+        expected.print();
+        assert_eq!(root2, expected);
+    }
+
+    #[test]
+    fn domains() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        root.print();
+
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"www.example.com"[..]), 1),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"test.example.com"[..]), 2),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"*.alldomains.org"[..]), 3),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"alldomains.org"[..]), 4),
+            InsertResult::Ok
+        );
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"pouet.alldomains.org"[..]), 5),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"hello.com"[..]), 6),
+            InsertResult::Ok
+        );
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"*.hello.com"[..]), 7),
+            InsertResult::Ok
+        );
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"images./cdn[0-9]+/.hello.com"[..]), 8),
+            InsertResult::Ok
+        );
+        root.print();
+        assert_eq!(
+            root.domain_insert(Vec::from(&b"/test[0-9]+/.www.hello.com"[..]), 9),
+            InsertResult::Ok
+        );
+        root.print();
+
+        assert_eq!(root.domain_lookup(&b"example.com"[..], true), None);
+        assert_eq!(
+            root.domain_lookup(&b"blah.test.example.com"[..], true),
+            None
+        );
+        assert_eq!(
+            root.domain_lookup(&b"www.example.com"[..], true),
+            Some(&(b"www.example.com"[..].to_vec(), 1))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"alldomains.org"[..], true),
+            Some(&(b"alldomains.org"[..].to_vec(), 4))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"test.hello.com"[..], true),
+            Some(&(b"*.hello.com"[..].to_vec(), 7))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"images.cdn10.hello.com"[..], true),
+            Some(&(b"images./cdn[0-9]+/.hello.com"[..].to_vec(), 8))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"test42.www.hello.com"[..], true),
+            Some(&(b"/test[0-9]+/.www.hello.com"[..].to_vec(), 9))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"test.alldomains.org"[..], true),
+            Some(&(b"*.alldomains.org"[..].to_vec(), 3))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"hello.alldomains.org"[..], true),
+            Some(&(b"*.alldomains.org"[..].to_vec(), 3))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"pouet.alldomains.org"[..], true),
+            Some(&(b"pouet.alldomains.org"[..].to_vec(), 5))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"blah.test.alldomains.org"[..], true),
+            None
+        );
+
+        assert_eq!(
+            root.domain_remove(&Vec::from(&b"alldomains.org"[..])),
+            RemoveResult::Ok
+        );
+        println!("after remove");
+        root.print();
+        assert_eq!(root.domain_lookup(&b"alldomains.org"[..], true), None);
+        assert_eq!(
+            root.domain_lookup(&b"test.alldomains.org"[..], true),
+            Some(&(b"*.alldomains.org"[..].to_vec(), 3))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"hello.alldomains.org"[..], true),
+            Some(&(b"*.alldomains.org"[..].to_vec(), 3))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"pouet.alldomains.org"[..], true),
+            Some(&(b"pouet.alldomains.org"[..].to_vec(), 5))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"test.hello.com"[..], true),
+            Some(&(b"*.hello.com"[..].to_vec(), 7))
+        );
+        assert_eq!(
+            root.domain_lookup(&b"blah.test.alldomains.org"[..], true),
+            None
+        );
+    }
+
+    #[test]
+    fn wildcard() {
+        let mut root: TrieNode<u8> = TrieNode::root();
+        root.print();
+        root.domain_insert("*.clever-cloud.com".as_bytes().to_vec(), 2u8);
+        root.domain_insert("services.clever-cloud.com".as_bytes().to_vec(), 0u8);
+        root.domain_insert("*.services.clever-cloud.com".as_bytes().to_vec(), 1u8);
+
+        let res = root.domain_lookup(b"test.services.clever-cloud.com", true);
+        println!("query result: {res:?}");
+
+        assert_eq!(
+            root.domain_lookup(b"pgstudio.services.clever-cloud.com", true),
+            Some(&("*.services.clever-cloud.com".as_bytes().to_vec(), 1u8))
+        );
+    }
+
+    fn hm_insert(h: std::collections::HashMap<String, u32>) -> bool {
+        let mut root: TrieNode<u32> = TrieNode::root();
+
+        for (k, v) in h.iter() {
+            if k.is_empty() {
+                continue;
+            }
+
+            if k.as_bytes()[0] == b'.' {
+                continue;
+            }
+
+            if k.contains('/') {
+                continue;
+            }
+
+            if k == "*" {
+                continue;
+            }
+
+            //println!("inserting key: '{}', value: '{}'", k, v);
+            //assert_eq!(root.domain_insert(Vec::from(k.as_bytes()), *v), InsertResult::Ok);
+            assert_eq!(
+                root.insert(Vec::from(k.as_bytes()), *v),
+                InsertResult::Ok,
+                "could not insert ({k}, {v})"
+            );
+            //root.print();
+        }
+
+        //root.print();
+        for (k, v) in h.iter() {
+            if k.is_empty() {
+                continue;
+            }
+
+            if k.as_bytes()[0] == b'.' {
+                continue;
+            }
+
+            if k.contains('/') {
+                continue;
+            }
+
+            if k == "*" {
+                continue;
+            }
+
+            //match root.domain_lookup(k.as_bytes()) {
+            match root.lookup(k.as_bytes(), false) {
+                None => {
+                    println!("did not find key '{k}'");
+                    return false;
+                }
+                Some(&(ref k1, v1)) => {
+                    if k.as_bytes() != &k1[..] || *v != v1 {
+                        println!(
+                            "request ({}, {}), got ({}, {})",
+                            k,
+                            v,
+                            str::from_utf8(&k1[..]).unwrap(),
+                            v1
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /* FIXME: randomly fails
+    quickcheck! {
+      fn qc_insert(h: std::collections::HashMap<String, u32>) -> bool {
+        hm_insert(h)
+      }
+    }
+    */
+
+    #[test]
+    fn insert_disappearing_tree() {
+        let h: std::collections::HashMap<String, u32> = [
+            (String::from("\n\u{3}"), 0),
+            (String::from("\n\u{0}"), 1),
+            (String::from("\n"), 2),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+        assert!(hm_insert(h));
+    }
+
+    #[test]
+    fn size() {
+        assert_size!(TrieNode<u32>, 136);
+    }
+}

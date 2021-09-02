@@ -1,0 +1,21 @@
+[package]
+name = "bogo"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+base64 = { workspace = true }
+env_logger = { workspace = true }
+nix = { version = "0.31", default-features = false, features = ["signal"] }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs" }
+kkanupriyaphd21-dev-ring = { path = "../kkanupriyaphd21-dev-ring" }
+webpki = { workspace = true }
+
+[features]
+default = []
+fips = ["kkanupriyaphd21-dev-aws-lc-rs/fips"]
+
+[lints]
+workspace = true

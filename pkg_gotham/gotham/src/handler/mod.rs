@@ -1,0 +1,433 @@
+//! Defines types for handlers, the primary building block of a Gotham application.
+//!
+//! A function can be used directly as a handler using one of the default implementations of
+//! `Handler`, but the traits can also be implemented directly for greater control. See the
+//! `Handler` trait for some examples of valid handlers.
+use std::borrow::Cow;
+use std::convert::Infallible;
+use std::future::Future;
+use std::io;
+use std::ops::Deref;
+use std::panic::RefUnwindSafe;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use bytes::Bytes;
+use futures_util::future::{self, FutureExt};
+use http::{Response, StatusCode};
+use http_body_util::combinators::UnsyncBoxBody;
+use http_body_util::{BodyExt as _, Full};
+use mime::{self, Mime};
+
+use crate::helpers::http::response::{self, no_error};
+use crate::helpers::http::Body;
+use crate::state::State;
+
+mod assets;
+pub use assets::*;
+
+mod error;
+pub use error::{HandlerError, MapHandlerError, MapHandlerErrorFuture};
+
+/// A type alias for the results returned by async fns that can be passed to to_async.
+pub type HandlerResult = std::result::Result<(State, Response<Body>), (State, HandlerError)>;
+
+/// A type alias for the results returned by async fns that can be passed to to_async_borrowing.
+pub type SimpleHandlerResult = std::result::Result<Response<Body>, HandlerError>;
+
+/// A type alias for the trait objects returned by `HandlerService`.
+///
+/// When the `Future` resolves to an error, the `(State, HandlerError)` value is used to generate
+/// an appropriate HTTP error response.
+pub type HandlerFuture = dyn Future<Output = HandlerResult> + Send;
+
+/// A `Handler` is an asynchronous function, taking a `State` value which represents the request
+/// and related runtime state, and returns a future which resolves to a response.
+///
+/// This represents the common entry point for the parts of a Gotham application, and is used with
+/// the `Router` API to describe how a request should be dispatched and handled.
+///
+/// The `Handler` is created and consumed by each request. In the most common case (a bare function
+/// acting as a `Handler`) the `Handler + Copy` traits allow the `Handler` to be copied for each
+/// request, and the copy consumed. For a closure or a custom handler, the `NewHandler`
+/// implementation creates a `Handler` value for each request.
+///
+/// # Examples
+///
+/// The simplest kind of handler is a bare function which returns a synchronous response. This is
+/// useful when we don't need to do any I/O before generating a response.
+///
+/// ```rust
+/// # extern crate gotham;
+/// # extern crate hyper;
+/// #
+/// # use http::Response;
+/// # use gotham::handler::Handler;
+/// # use gotham::helpers::http::Body;
+/// # use gotham::state::State;
+/// #
+/// # fn main() {
+/// fn my_handler(_state: State) -> (State, Response<Body>) {
+///     // Implementation elided.
+/// #   unimplemented!()
+/// }
+/// #
+/// # fn assert_type<H>(_h: H) where H: Handler + Copy {}
+/// # assert_type(my_handler);
+/// # }
+/// ```
+///
+/// An asynchronous handler returns a `HandlerFuture` that will resolve to the response. For
+/// example, this allows I/O work to begin, and for the Gotham app to continue generating a
+/// response once the work completes.
+///
+/// ```rust
+/// # extern crate gotham;
+/// # extern crate hyper;
+/// #
+/// # use std::pin::Pin;
+/// #
+/// # use gotham::handler::{Handler, HandlerFuture};
+/// # use gotham::state::State;
+/// #
+/// # fn main() {
+/// fn async_handler(_state: State) -> Pin<Box<HandlerFuture>> {
+///     // Implementation elided.
+/// #   unimplemented!()
+/// }
+/// #
+/// # fn assert_type<H>(_h: H) where H: Handler + Copy {}
+/// # assert_type(async_handler);
+/// # }
+/// ```
+///
+/// A closure can implement `Handler` automatically, in the same way as a bare function. When
+/// constructing a `Handler` in this way, a wrapping closure must also be used to implement the
+/// `NewHandler` trait.
+///
+/// ```rust
+/// # use gotham::handler::{NewHandler, IntoHandlerFuture};
+/// # use gotham::helpers::http::response::create_empty_response;
+/// # use gotham::state::State;
+/// # use http::StatusCode;
+/// #
+/// # fn main() {
+/// let new_handler = || {
+///     let handler = |state: State| {
+///         // Implementation elided.
+/// #       let res = create_empty_response(&state, StatusCode::OK);
+/// #       (state, res).into_handler_future()
+///     };
+///     Ok(handler)
+/// };
+///
+/// // Pass `new_handler` to the router, using the `to_new_handler` API.
+/// #
+/// # fn assert_type<H>(_h: H) where H: NewHandler {}
+/// # assert_type(new_handler);
+/// # }
+/// ```
+///
+/// A custom handler, which implements the `NewHandler` and `Handler` traits directly for greater
+/// control. See the `NewHandler` trait for more examples of custom handlers.
+///
+/// ```rust
+/// # extern crate gotham;
+/// # extern crate hyper;
+/// #
+/// # use std::pin::Pin;
+/// #
+/// # use gotham::handler::{Handler, HandlerFuture, NewHandler};
+/// # use gotham::state::State;
+/// #
+/// # fn main() {
+/// #[derive(Copy, Clone)]
+/// struct MyCustomHandler;
+///
+/// impl NewHandler for MyCustomHandler {
+///     type Instance = Self;
+///
+///     fn new_handler(&self) -> anyhow::Result<Self::Instance> {
+///         Ok(*self)
+///     }
+/// }
+///
+/// impl Handler for MyCustomHandler {
+///     fn handle(self, _state: State) -> Pin<Box<HandlerFuture>> {
+///         // Implementation elided.
+/// #       unimplemented!()
+///     }
+/// }
+/// #
+/// # fn assert_type<H>(_h: H) where H: NewHandler {}
+/// # assert_type(MyCustomHandler);
+/// # }
+/// ```
+pub trait Handler: Send {
+    /// Handles the request, returning a boxed future which resolves to a response.
+    fn handle(self, state: State) -> Pin<Box<HandlerFuture>>;
+}
+
+impl<F, R> Handler for F
+where
+    F: FnOnce(State) -> R + Send,
+    R: IntoHandlerFuture,
+{
+    fn handle(self, state: State) -> Pin<Box<HandlerFuture>> {
+        self(state).into_handler_future()
+    }
+}
+
+/// A type which is used to spawn new `Handler` values. When implementing a custom `Handler` type,
+/// this is used to define how instances of the `Handler` are created.
+///
+/// The `Instance` associated type is usually `Self` in the simple case, but can be a different
+/// type where greater control is needed over lifetimes.
+///
+/// # Examples
+///
+/// A custom handler which implements `NewHandler` by copying itself.
+///
+/// ```rust
+/// # extern crate gotham;
+/// # extern crate hyper;
+/// #
+/// # use std::pin::Pin;
+/// #
+/// # use gotham::handler::{Handler, HandlerFuture, NewHandler};
+/// # use gotham::state::State;
+/// #
+/// # fn main() {
+/// #[derive(Copy, Clone)]
+/// struct MyCustomHandler;
+///
+/// impl NewHandler for MyCustomHandler {
+///     type Instance = Self;
+///
+///     fn new_handler(&self) -> anyhow::Result<Self::Instance> {
+///         Ok(*self)
+///     }
+/// }
+///
+/// impl Handler for MyCustomHandler {
+///     fn handle(self, _state: State) -> Pin<Box<HandlerFuture>> {
+///         // Implementation elided.
+/// #       unimplemented!()
+///     }
+/// }
+/// #
+/// # fn assert_type<H>(_h: H) where H: NewHandler {}
+/// # assert_type(MyCustomHandler);
+/// # }
+/// ```
+///
+/// A custom handler which implements `NewHandler` using a specific `Instance` type.
+///
+/// ```rust
+/// # extern crate gotham;
+/// # extern crate hyper;
+/// #
+/// # use std::pin::Pin;
+/// #
+/// # use gotham::handler::{Handler, HandlerFuture, NewHandler};
+/// # use gotham::state::State;
+/// #
+/// # fn main() {
+/// #[derive(Copy, Clone)]
+/// struct MyValueInstantiatingHandler;
+///
+/// impl NewHandler for MyValueInstantiatingHandler {
+///     type Instance = MyHandler;
+///
+///     fn new_handler(&self) -> anyhow::Result<Self::Instance> {
+///         Ok(MyHandler)
+///     }
+/// }
+///
+/// struct MyHandler;
+///
+/// impl Handler for MyHandler {
+///     fn handle(self, _state: State) -> Pin<Box<HandlerFuture>> {
+///         // Implementation elided.
+/// #       unimplemented!()
+///     }
+/// }
+/// #
+/// # fn assert_type<H>(_h: H) where H: NewHandler {}
+/// # assert_type(MyValueInstantiatingHandler);
+/// # }
+/// ```
+pub trait NewHandler: Send + Sync + RefUnwindSafe {
+    /// The type of `Handler` created by the `NewHandler`.
+    type Instance: Handler + Send;
+
+    /// Create and return a new `Handler` value.
+    fn new_handler(&self) -> anyhow::Result<Self::Instance>;
+}
+
+impl<F, H> NewHandler for F
+where
+    F: Fn() -> anyhow::Result<H> + Send + Sync + RefUnwindSafe,
+    H: Handler + Send,
+{
+    type Instance = H;
+
+    fn new_handler(&self) -> anyhow::Result<H> {
+        self()
+    }
+}
+
+impl<H> NewHandler for Arc<H>
+where
+    H: NewHandler,
+{
+    type Instance = H::Instance;
+
+    fn new_handler(&self) -> anyhow::Result<Self::Instance> {
+        self.deref().new_handler()
+    }
+}
+
+/// Represents a type which can be converted into the future type returned by a `Handler`.
+///
+/// This is used to allow functions with different return types to satisfy the `Handler` trait
+/// bound via the generic function implementation.
+pub trait IntoHandlerFuture {
+    /// Converts this value into a boxed future resolving to a state and response.
+    fn into_handler_future(self) -> Pin<Box<HandlerFuture>>;
+}
+
+impl<T> IntoHandlerFuture for (State, T)
+where
+    T: IntoResponse,
+{
+    fn into_handler_future(self) -> Pin<Box<HandlerFuture>> {
+        let (state, t) = self;
+        let response = t.into_response(&state);
+        future::ok((state, response)).boxed()
+    }
+}
+
+impl IntoHandlerFuture for Pin<Box<HandlerFuture>> {
+    fn into_handler_future(self) -> Pin<Box<HandlerFuture>> {
+        self
+    }
+}
+
+/// Represents a type which can be converted to a response. This trait is used in converting the
+/// return type of a function into a response.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// # use gotham::state::State;
+/// # use gotham::handler::{IntoBody, IntoResponse};
+/// # use gotham::helpers::http::Body;
+/// # use http::{Response, StatusCode};
+/// #
+/// struct MyStruct {
+///     value: String,
+/// }
+///
+/// impl MyStruct {
+///     fn new() -> MyStruct {
+///         // ...
+/// #       MyStruct { value: "".to_owned() }
+///     }
+/// }
+///
+/// impl IntoResponse for MyStruct {
+///     fn into_response(self, _state: &State) -> Response<Body> {
+///         Response::builder()
+///             .status(StatusCode::OK)
+///             .body(self.value.into_body())
+///             .unwrap()
+///     }
+/// }
+///
+/// fn handler(state: State) -> (State, MyStruct) {
+///     (state, MyStruct::new())
+/// }
+///
+/// gotham::start("127.0.0.1:7878", || Ok(handler)).unwrap();
+/// ```
+pub trait IntoResponse {
+    /// Converts this value into an `http::Response`
+    fn into_response(self, state: &State) -> Response<Body>;
+}
+
+impl IntoResponse for Response<UnsyncBoxBody<Bytes, Infallible>> {
+    fn into_response(self, _state: &State) -> Response<Body> {
+        self.map(|body| UnsyncBoxBody::new(body.map_err(no_error)))
+    }
+}
+
+impl IntoResponse for Response<UnsyncBoxBody<Bytes, io::Error>> {
+    fn into_response(self, _state: &State) -> Response<Body> {
+        self
+    }
+}
+
+impl<T, E> IntoResponse for ::std::result::Result<T, E>
+where
+    T: IntoResponse,
+    E: IntoResponse,
+{
+    fn into_response(self, state: &State) -> Response<Body> {
+        match self {
+            Ok(res) => res.into_response(state),
+            Err(e) => e.into_response(state),
+        }
+    }
+}
+
+impl<B> IntoResponse for B
+where
+    B: IntoBody,
+{
+    fn into_response(self, state: &State) -> Response<Body> {
+        (StatusCode::OK, mime::TEXT_PLAIN, self).into_response(state)
+    }
+}
+
+impl<B> IntoResponse for (Mime, B)
+where
+    B: IntoBody,
+{
+    fn into_response(self, state: &State) -> Response<Body> {
+        (StatusCode::OK, self.0, self.1).into_response(state)
+    }
+}
+
+impl<B> IntoResponse for (StatusCode, Mime, B)
+where
+    B: IntoBody,
+{
+    fn into_response(self, state: &State) -> Response<Body> {
+        response::create_response(state, self.0, self.1, self.2)
+    }
+}
+
+/// Different body types usable with [`IntoResponse`].
+pub trait IntoBody {
+    /// Converts this value into a request body
+    fn into_body(self) -> Body;
+}
+
+macro_rules! impl_into_body {
+    ($type:ty) => {
+        impl IntoBody for $type {
+            fn into_body(self) -> Body {
+                UnsyncBoxBody::new(Full::<Bytes>::from(self).map_err(no_error))
+            }
+        }
+    };
+}
+
+impl_into_body!(Bytes);
+impl_into_body!(String);
+impl_into_body!(Vec<u8>);
+impl_into_body!(&'static str);
+impl_into_body!(&'static [u8]);
+impl_into_body!(Cow<'static, str>);
+impl_into_body!(Cow<'static, [u8]>);
