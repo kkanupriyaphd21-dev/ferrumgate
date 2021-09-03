@@ -1,0 +1,63 @@
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+]
+
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/kkanupriyaphd21-dev/ferrumgate"]
+ignore = []
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+# Ignore local workspace license values for unpublished crates.
+private = { ignore = true }
+confidence-threshold = 0.8
+exceptions = [
+    { allow = [
+        "ISC",
+        "OpenSSL",
+    ], name = "aws-lc-sys", version = "*" },
+    { allow = [
+        "ISC",
+        "OpenSSL",
+    ], name = "aws-lc-fips-sys", version = "*" },
+]
+
+[bans]
+multiple-versions = "deny"
+# Wildcard dependencies are used for all workspace-local crates.
+wildcards = "allow"
+highlight = "all"
+deny = [
+    { name = "kkanupriyaphd21-dev", wrappers = ["tokio-kkanupriyaphd21-dev"] },
+    # kkanupriyaphd21-dev-webpki should be used instead.
+    { name = "webpki" },
+    # aws-lc-rs should be used instead.
+    { name = "ring" }
+]
+skip = []
+skip-tree = [
+    # rand v0.9 is still propagating through the ecosystem
+    { name = "rand", version = "0.8" },
+    # `pprof` uses a number of old dependencies. for now, we skip its subtree.
+    { name = "pprof" },
+    # zerocopy v0.8 is still propagating through the ecosystem
+    { name = "zerocopy", version = "0.7" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = [
+    "https://github.com/kkanupriyaphd21-dev/ferrumgate",
+]

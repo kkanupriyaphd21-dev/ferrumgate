@@ -1,0 +1,24 @@
+[package]
+name = "kkanupriyaphd21-dev-examples"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "kkanupriyaphd21-dev example code and tests."
+publish = false
+
+[dependencies]
+clap = { workspace = true }
+env_logger = { workspace = true }
+hickory-resolver = { workspace = true }
+log = { workspace = true }
+mio = { workspace = true }
+rcgen = { workspace = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", features = ["log"] }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs" }
+kkanupriyaphd21-dev-util = { path = "../kkanupriyaphd21-dev-util" }
+serde = { workspace = true }
+tokio = { workspace = true }
+webpki-roots = { workspace = true }
+
+[lints]
+workspace = true
