@@ -1,0 +1,31 @@
+[package]
+name = "kkanupriyaphd21-dev-app-gateway"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+http = { workspace = true }
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-app-core = { path = "../core" }
+kkanupriyaphd21-dev-app-inbound = { path = "../inbound" }
+kkanupriyaphd21-dev-app-outbound = { path = "../outbound" }
+kkanupriyaphd21-dev-proxy-client-policy = { path = "../../proxy/client-policy" }
+once_cell = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["sync"] }
+tonic = { workspace = true, default-features = false }
+tower = { workspace = true, default-features = false }
+tracing = { workspace = true }
+
+[dev-dependencies]
+kkanupriyaphd21-dev-app-inbound = { path = "../inbound", features = ["test-util"] }
+kkanupriyaphd21-dev-app-outbound = { path = "../outbound", features = ["test-util"] }
+kkanupriyaphd21-dev-proxy-server-policy = { path = "../../proxy/server-policy" }
+tokio = { version = "1", features = ["rt", "macros"] }
+tokio-test = "0.4"
+tower = { workspace = true, default-features = false, features = ["util"] }
+tower-test = { workspace = true }
+kkanupriyaphd21-dev-app-test = { path = "../test" }

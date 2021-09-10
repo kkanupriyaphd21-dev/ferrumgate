@@ -1,0 +1,26 @@
+[package]
+name = "kkanupriyaphd21-dev-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+clap = { workspace = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs", optional = true }
+kkanupriyaphd21-dev-ring = { path = "../kkanupriyaphd21-dev-ring", optional = true }
+kkanupriyaphd21-dev-graviola = { workspace = true, optional = true }
+kkanupriyaphd21-dev-test = { workspace = true, default-features = false }
+
+[features]
+default = []
+aws-lc-rs = ["kkanupriyaphd21-dev-aws-lc-rs"]
+fips = ["kkanupriyaphd21-dev-aws-lc-rs/fips", "aws-lc-rs"]
+graviola = ["dep:kkanupriyaphd21-dev-graviola"]
+ring = ["dep:kkanupriyaphd21-dev-ring"]
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { workspace = true }
+
+[lints]
+workspace = true
