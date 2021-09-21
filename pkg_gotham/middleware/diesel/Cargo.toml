@@ -1,0 +1,25 @@
+[package]
+name = "gotham_middleware_diesel"
+version = "0.6.0"
+authors = ["colinbankier <dev@kkanupriyaphd21.dev>"]
+edition = "2018"
+description = "A Gotham Middleware that provides access to a Diesel connection via an R2D2 pool to allow other Middleware and Handlers to interact with a database."
+license.workspace = true
+homepage.workspace = true
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+readme = "README.md"
+categories = ["web-programming::http-server"]
+keywords = ["http", "async", "web", "gotham", "diesel"]
+
+[dependencies]
+gotham = { workspace = true, default-features = false, features = ["derive"] }
+
+diesel = { version = "2.1", features = ["r2d2"] }
+futures-util = "0.3.14"
+log = "0.4"
+tokio = { version = "1.0", features = ["full"] }
+
+[dev-dependencies]
+gotham = { workspace = true, default-features = false, features = ["testing"] }
+
+diesel = { version = "2.1", features = ["sqlite"] }

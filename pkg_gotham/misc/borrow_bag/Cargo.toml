@@ -1,0 +1,10 @@
+[package]
+name = "borrow-bag"
+version = "1.1.1" # Alter html_root_url in lib.rs also
+authors = ["Shaun Mangelsdorf <dev@kkanupriyaphd21.dev>",
+           "Bradley Beddoes <dev@kkanupriyaphd21.dev>"]
+description = "A type-safe, heterogeneous collection with zero-cost add and borrow"
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition = "2015"
