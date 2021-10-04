@@ -1,0 +1,30 @@
+[package]
+name = "kkanupriyaphd21-dev-http-retry"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+http = { workspace = true }
+parking_lot = "0.12"
+pin-project = "1"
+tower = { workspace = true, features = ["retry"] }
+tracing = { workspace = true }
+thiserror = "2"
+
+kkanupriyaphd21-dev-http-box = { path = "../box" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-exp-backoff = { path = "../../exp-backoff" }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dev-dependencies]
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }
+kkanupriyaphd21-dev-mock-http-body = { path = "../../mock/http-body" }
+tokio = { version = "1", features = ["macros", "rt"] }
