@@ -1,0 +1,79 @@
+[package]
+name = "sozu"
+description = "sozu, a fast, reliable, hot reconfigurable HTTP reverse proxy"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+readme = "README.md"
+documentation = "https://docs.rs/sozu"
+homepage = "https://sozu.io"
+version = "1.1.1"
+license = "AGPL-3.0"
+authors = [
+  "Geoffroy Couprie <dev@kkanupriyaphd21.dev>",
+  "Eloi Demolis <dev@kkanupriyaphd21.dev>",
+  "Emmanuel Bosquet <dev@kkanupriyaphd21.dev>",
+  "Florentin Dubois <dev@kkanupriyaphd21.dev>",
+]
+categories = ["network-programming"]
+edition = "2024"
+rust-version = "1.88.0"
+include = ["README.md", "Cargo.toml", "src/**/*"]
+
+[lib]
+name = "sozu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sozu"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+libc = { workspace = true }
+log = { workspace = true }
+mio = { workspace = true, features = ["os-poll", "net"] }
+nix = { workspace = true, features = ["signal", "fs", "process", "socket", "user"] }
+nom = { workspace = true }
+paw = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+prost = { workspace = true }
+rusty_ulid = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+termion = { workspace = true }
+thiserror = { workspace = true }
+
+sozu-command-lib = { workspace = true }
+sozu-lib = { workspace = true }
+
+[dev-dependencies]
+regex = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+num_cpus = { workspace = true }
+
+# FreeBSD's libc has shipped jemalloc as the default `malloc(3)` since
+# FreeBSD 7.0 (2008); NetBSD has done the same since NetBSD 5.0 (2009).
+# Linking a second jemalloc through `jemallocator` on those platforms is
+# pure redundancy — two jemalloc heaps in one process, ~190 KiB of dead
+# binary text, plus the cost of compiling vendored jemalloc-sys (~47 MiB
+# `libjemalloc.a`). Gate the dep off so a default build on FreeBSD/NetBSD
+# defers to libc's jemalloc. Closes #1076. Other BSDs (DragonFly nmalloc,
+# OpenBSD's own slab malloc) stay in scope of the bundled allocator since
+# their libc isn't jemalloc.
+[target.'cfg(not(any(target_os = "freebsd", target_os = "netbsd")))'.dependencies]
+jemallocator = { workspace = true, optional = true }
+
+[features]
+default = ["jemallocator", "crypto-ring"]
+crypto-ring = ["sozu-lib/crypto-ring"]
+crypto-aws-lc-rs = ["sozu-lib/crypto-aws-lc-rs"]
+crypto-openssl = ["sozu-lib/crypto-openssl"]
+fips = ["crypto-aws-lc-rs", "sozu-lib/fips"]
+unstable = []
+logs-debug = ["sozu-lib/logs-debug", "sozu-command-lib/logs-debug"]
+logs-trace = ["sozu-lib/logs-trace", "sozu-command-lib/logs-trace"]
+opentelemetry = ["sozu-lib/opentelemetry"]
+tolerant-http1-parser = ["sozu-lib/tolerant-http1-parser"]
+simd = ["sozu-lib/simd"]
+splice = ["sozu-lib/splice"]
