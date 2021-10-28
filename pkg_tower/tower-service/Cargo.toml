@@ -1,0 +1,27 @@
+[package]
+name = "tower-service"
+# When releasing to crates.io:
+# - Update doc url
+#   - Cargo.toml
+#   - README.md
+# - Update CHANGELOG.md.
+# - Create "v0.2.x" git tag.
+version = "0.3.3"
+authors = ["Tower Maintainers <dev@kkanupriyaphd21.dev>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+homepage = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+documentation = "https://docs.rs/tower-service/0.3.3"
+description = """
+Trait representing an asynchronous, request / response based, client or server.
+"""
+categories = ["asynchronous", "network-programming"]
+edition = "2018"
+
+[dependencies]
+
+[dev-dependencies]
+http = { workspace = true }
+tower-layer = { version = "0.3", path = "../tower-layer" }
+tokio = { workspace = true, features = ["macros", "time"] }
