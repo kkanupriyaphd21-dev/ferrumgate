@@ -1,0 +1,78 @@
+[package]
+name = "kkanupriyaphd21-dev-app-outbound"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Configures and runs the outbound proxy
+"""
+
+[features]
+default = []
+allow-loopback = []
+test-subscriber = []
+test-util = ["kkanupriyaphd21-dev-app-test", "kkanupriyaphd21-dev-meshtls/test-util", "dep:http-body"]
+
+prometheus-client-rust-242 = [] # TODO
+
+[dependencies]
+ahash = "0.8"
+bytes = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true, optional = true }
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev2-proxy-api = { workspace = true, features = ["outbound"] }
+once_cell = "1"
+parking_lot = "0.12"
+pin-project = "1"
+prometheus-client = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["sync"] }
+tonic = { workspace = true, default-features = false }
+tower = { workspace = true, features = ["util"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-app-core = { path = "../core" }
+kkanupriyaphd21-dev-app-test = { path = "../test", optional = true }
+kkanupriyaphd21-dev-distribute = { path = "../../distribute" }
+kkanupriyaphd21-dev-http-classify = { path = "../../http/classify" }
+kkanupriyaphd21-dev-http-prom = { path = "../../http/prom" }
+kkanupriyaphd21-dev-http-retry = { path = "../../http/retry" }
+kkanupriyaphd21-dev-http-route = { path = "../../http/route" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+kkanupriyaphd21-dev-meshtls = { path = "../../meshtls", optional = true, default-features = false }
+kkanupriyaphd21-dev-opaq-route = { path = "../../opaq-route" }
+kkanupriyaphd21-dev-proxy-client-policy = { path = "../../proxy/client-policy", features = [
+    "proto",
+] }
+kkanupriyaphd21-dev-retry = { path = "../../retry" }
+kkanupriyaphd21-dev-tls-route = { path = "../../tls/route" }
+kkanupriyaphd21-dev-tonic-stream = { path = "../../tonic-stream" }
+kkanupriyaphd21-dev-tonic-watch = { path = "../../tonic-watch" }
+
+[dev-dependencies]
+futures-util = "0.3"
+http-body = { workspace = true }
+http-body-util = { workspace = true, features = ["channel"] }
+hyper = { workspace = true, features = ["http1", "http2"] }
+hyper-util = { workspace = true }
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+tokio-kkanupriyaphd21-dev = { workspace = true }
+tokio-test = "0.4"
+tower-test = { workspace = true }
+
+kkanupriyaphd21-dev-app-test = { path = "../test", features = ["client-policy"] }
+kkanupriyaphd21-dev-http-box = { path = "../../http/box" }
+kkanupriyaphd21-dev-http-prom = { path = "../../http/prom", features = ["test-util"] }
+kkanupriyaphd21-dev-io = { path = "../../io", features = ["tokio-test"] }
+kkanupriyaphd21-dev-meshtls = { path = "../../meshtls", features = [
+    "test-util",
+] }
+kkanupriyaphd21-dev-mock-http-body = { path = "../../mock/http-body" }
+kkanupriyaphd21-dev-stack = { path = "../../stack", features = ["test-util"] }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
