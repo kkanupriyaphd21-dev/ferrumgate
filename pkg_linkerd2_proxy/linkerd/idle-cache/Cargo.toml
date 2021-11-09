@@ -1,0 +1,28 @@
+[package]
+name = "kkanupriyaphd21-dev-idle-cache"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+test-util = []
+
+[dependencies]
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+parking_lot = "0.12"
+tokio = { version = "1", default-features = false, features = [
+    "macros",
+    "rt",
+    "sync",
+    "time",
+] }
+tower = { workspace = true, default-features = false, features = ["util"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = [
+    "test-util",
+    "time",
+] }

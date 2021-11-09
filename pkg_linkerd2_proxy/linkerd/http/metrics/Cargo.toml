@@ -1,0 +1,25 @@
+[package]
+name = "kkanupriyaphd21-dev-http-metrics"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+test-util = []
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+parking_lot = "0.12"
+pin-project = "1"
+tokio = { version = "1", features = ["time"] }
+tower = { workspace = true }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-http-classify = { path = "../classify" }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics", features = ["stack"] }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
