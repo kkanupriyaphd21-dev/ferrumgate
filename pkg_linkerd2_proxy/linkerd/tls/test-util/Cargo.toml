@@ -1,0 +1,7 @@
+[package]
+name = "kkanupriyaphd21-dev-tls-test-util"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = "2018"
+publish = { workspace = true }
