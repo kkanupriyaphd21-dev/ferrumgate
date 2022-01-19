@@ -1,0 +1,31 @@
+[package]
+name = "kkanupriyaphd21-dev-metrics"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+default = []
+process = ["dep:kubert-prometheus-process"]
+stack = ["dep:kkanupriyaphd21-dev-stack"]
+test_util = []
+
+[dependencies]
+bytes = { workspace = true }
+deflate = { version = "1", features = ["gzip"] }
+http = { workspace = true }
+http-body-util = { workspace = true }
+kubert-prometheus-process = { version = "0.2", optional = true }
+parking_lot = "0.12"
+prometheus-client = { workspace = true }
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-http-box = { path = "../http/box" }
+kkanupriyaphd21-dev-stack = { path = "../stack", optional = true }
+
+[dev-dependencies]
+quickcheck = { version = "1", default-features = false }
+tokio = { version = "1", features = ["rt", "macros", "test-util", "time"] }
