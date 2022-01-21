@@ -1,0 +1,27 @@
+[package]
+name = "kkanupriyaphd21-dev-ci-bench"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "kkanupriyaphd21-dev CPU instruction counting benchmarks."
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+byteorder = { workspace = true }
+clap = { workspace = true }
+itertools = { workspace = true }
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-aws-lc-rs = { path = "../kkanupriyaphd21-dev-aws-lc-rs" }
+kkanupriyaphd21-dev-ring = { path = "../kkanupriyaphd21-dev-ring" }
+kkanupriyaphd21-dev-test = { workspace = true, default-features = false }
+kkanupriyaphd21-dev-fuzzing-provider = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+crabgrind = { workspace = true }
+
+[lints]
+workspace = true
