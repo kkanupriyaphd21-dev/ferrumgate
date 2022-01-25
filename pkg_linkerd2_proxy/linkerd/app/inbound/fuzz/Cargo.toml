@@ -1,0 +1,40 @@
+[package]
+name = "kkanupriyaphd21-dev-app-inbound-fuzz"
+version = { workspace = true }
+authors = ["Automatically generated"]
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[package.metadata]
+cargo-fuzz = true
+
+[target.'cfg(fuzzing)'.dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+hyper = { version = "0.14", features = ["deprecated", "http1", "http2"] }
+http = { workspace = true }
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+kkanupriyaphd21-dev-app-core = { path = "../../core" }
+kkanupriyaphd21-dev-app-inbound = { path = ".." }
+kkanupriyaphd21-dev-app-test = { path = "../../test" }
+kkanupriyaphd21-dev-idle-cache = { path = "../../../idle-cache", features = ["test-util"] }
+kkanupriyaphd21-dev-meshtls = { path = "../../../meshtls", features = [
+    "test-util",
+] }
+kkanupriyaphd21-dev-tracing = { path = "../../../tracing", features = ["ansi"] }
+tokio = { version = "1", features = ["full"] }
+tracing = { workspace = true }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+resolver = "2"
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = true
+doc = false
+
+# [patch.crates-io]
+# kkanupriyaphd21-dev2-proxy-api = { git = "https://github.com/kkanupriyaphd21-dev/ferrumgate", branch = "ver/deps" }
