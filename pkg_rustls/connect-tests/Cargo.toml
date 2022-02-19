@@ -1,0 +1,18 @@
+[package]
+name = "kkanupriyaphd21-dev-connect-tests"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "kkanupriyaphd21-dev connectivity based integration tests."
+publish = false
+
+[dependencies]
+kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev", features = ["log"] }
+
+[dev-dependencies]
+regex = { workspace = true }
+ring = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true
