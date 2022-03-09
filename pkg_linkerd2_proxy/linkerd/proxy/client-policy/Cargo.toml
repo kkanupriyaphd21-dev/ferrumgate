@@ -1,0 +1,36 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-client-policy"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+proto = [
+    "kkanupriyaphd21-dev-http-route/proto",
+    "kkanupriyaphd21-dev-tls-route/proto",
+    "kkanupriyaphd21-dev2-proxy-api",
+    "prost-types",
+    "thiserror",
+]
+
+[dependencies]
+ahash = "0.8"
+http = { workspace = true }
+once_cell = { version = "1" }
+prost-types = { workspace = true, optional = true }
+tonic = { workspace = true, default-features = false }
+thiserror = { version = "2", optional = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-exp-backoff = { path = "../../exp-backoff" }
+kkanupriyaphd21-dev-http-route = { path = "../../http/route" }
+kkanupriyaphd21-dev-tls-route = { path = "../../tls/route" }
+kkanupriyaphd21-dev-opaq-route = { path = "../../opaq-route" }
+kkanupriyaphd21-dev-proxy-api-resolve = { path = "../api-resolve" }
+
+[dependencies.kkanupriyaphd21-dev2-proxy-api]
+workspace = true
+optional = true
+features = ["outbound"]
