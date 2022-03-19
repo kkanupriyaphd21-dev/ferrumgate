@@ -1,0 +1,18 @@
+[package]
+name = "kkanupriyaphd21-dev-meshtls-verifier"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+tracing = { workspace = true }
+x509-parser = "0.18.1"
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+
+
+[dev-dependencies]
+rcgen = { version = "0.14.7", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }
