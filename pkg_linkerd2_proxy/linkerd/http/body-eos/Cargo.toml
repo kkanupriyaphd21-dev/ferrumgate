@@ -1,0 +1,25 @@
+[package]
+name = "kkanupriyaphd21-dev-http-body-eos"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Body middleware for processing the ends of streams.
+"""
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+pin-project = "1"
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+
+[dev-dependencies]
+bytes = { workspace = true }
+http-body-util = { workspace = true }
+tokio = { version = "1", features = ["macros", "test-util"] }
+
+kkanupriyaphd21-dev-mock-http-body = { path = "../../mock/http-body" }
