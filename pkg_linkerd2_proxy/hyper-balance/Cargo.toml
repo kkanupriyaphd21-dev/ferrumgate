@@ -1,0 +1,19 @@
+[package]
+name = "hyper-balance"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true }
+pin-project = "1"
+tower = { workspace = true, default-features = false, features = ["load"] }
+tokio = { version = "1", features = ["macros"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
