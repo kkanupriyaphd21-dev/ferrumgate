@@ -1,0 +1,20 @@
+[package]
+name = "kkanupriyaphd21-dev-http-retain"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Tower middleware to manage service lifecycles.
+
+This is mostly intended to support cache eviction.
+"""
+
+[dependencies]
+http = { workspace = true }
+http-body = { workspace = true }
+pin-project = "1"
+tower = { workspace = true, default-features = false }
+
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
