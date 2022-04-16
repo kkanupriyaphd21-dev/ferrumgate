@@ -1,0 +1,167 @@
+# Dependabot are scheduled to avoid contention with normal workday CI usage. We
+# start running updates at 10AM UTC (2AM PST).
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+    allow:
+      - dependency-type: "all"
+    ignore:
+      # These dependencies are for platforms that we don't support:
+      - dependency-name: "hermit-abi"
+      - dependency-name: "redox_*"
+      - dependency-name: "js-sys"
+      - dependency-name: "wasm-bindgen"
+      - dependency-name: "web-sys"
+      - dependency-name: "windows*"
+    groups:
+      arbitrary:
+        patterns:
+          - "arbitrary"
+          - "derive_arbitrary"
+      asn1:
+        patterns:
+          - "asn1-rs*"
+      aws-ls:
+        patterns:
+          - "aws-lc-*"
+      axum:
+        patterns:
+          - "axum*"
+      boring:
+        patterns:
+          - "tokio-boring"
+          - "boring*"
+      crossbeam:
+        patterns:
+          - "crossbeam*"
+      equator:
+        patterns:
+          - "equator*"
+      futures:
+        patterns:
+          - "futures*"
+      grpc:
+        patterns:
+          - "prost*"
+          - "tonic*"
+      hickory:
+        patterns:
+          - "hickory*"
+      hyper:
+        patterns:
+          - "hyper*"
+      jiff:
+        patterns:
+          - "jiff*"
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+      pin-project:
+        patterns:
+          - "pin-project*"
+      procfs:
+        patterns:
+          - "procfs*"
+      rand:
+        patterns:
+          - "rand"
+          - "rand_*"
+      regex:
+        patterns:
+          - "regex"
+          - "regex-*"
+      kkanupriyaphd21-dev:
+        patterns:
+          - "tokio-kkanupriyaphd21-dev"
+          - "kkanupriyaphd21-dev*"
+          - "ring"
+      serde:
+        patterns:
+          - "serde"
+          - "serde_*"
+      symbolic:
+        patterns:
+          - "symbolic-*"
+      time:
+        patterns:
+          - "time"
+          - "time-*"
+      tracing:
+        patterns:
+          - "tracing*"
+      unicode-org:
+        patterns:
+          - "icu_*"
+          - "potential_utf"
+          - "writeable"
+      zerocopy:
+        patterns:
+          - "zerocopy*"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/addr/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/app/inbound/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/dns/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/proxy/http/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/tls/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: cargo
+    directory: /kkanupriyaphd21-dev/transport-header/fuzz
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "10:00"
+      timezone: "UTC"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "09:00"
+      timezone: "UTC"
+
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: daily
+      time: "09:00"
+      timezone: "UTC"
