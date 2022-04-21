@@ -1,0 +1,34 @@
+[package]
+name = "kkanupriyaphd21-dev-http-upgrade"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Facilities for HTTP/1 upgrades.
+"""
+
+[dependencies]
+drain = { workspace = true }
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true, default-features = false, features = ["client"] }
+hyper-util = { workspace = true, default-features = false, features = [
+    "client",
+    "client-legacy",
+] }
+pin-project = "1"
+thiserror = "2"
+tokio = { version = "1", default-features = false }
+tower = { workspace = true, default-features = false }
+tracing = { workspace = true }
+try-lock = "0.2"
+
+kkanupriyaphd21-dev-duplex = { path = "../../duplex" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-http-box = { path = "../box" }
+kkanupriyaphd21-dev-http-variant = { path = "../variant" }
+kkanupriyaphd21-dev-io = { path = "../../io" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
