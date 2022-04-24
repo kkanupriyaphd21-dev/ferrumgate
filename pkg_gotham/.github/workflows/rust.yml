@@ -1,0 +1,119 @@
+name: Rust
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-gotham:
+    name: test-gotham${{ matrix.flag }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flag: ["", "--features full"]
+        command: ["test"]
+        include:
+          - flag: "--no-default-features"
+            command: "check"
+    
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        id: rust-toolchain
+      
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-rust-gotham${{ matrix.flag }}-${{ steps.rust-toolchain.outputs.cachekey }}
+      
+      - run: cargo ${{ matrix.command }} -p gotham ${{ matrix.flag }}
+  
+  test:
+    name: test-${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["stable", "beta"]
+        nightly: [false]
+        include:
+          - toolchain: "nightly"
+            nightly: true
+    
+    continue-on-error: ${{ matrix.nightly }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        id: rust-toolchain
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-rust-${{ steps.rust-toolchain.outputs.cache-key }}
+      
+      - run: cargo test --workspace
+  
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        with:
+          components: rustfmt
+      - run: cargo fmt -- --check
+  
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        id: rust-toolchain
+        with:
+          toolchain: "1.93"
+          components: clippy
+      
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-rust-${{ steps.rust-toolchain.outputs.cachekey }}-clippy
+      
+      - run: cargo clippy --workspace --profile test -- -Dclippy::all
+  
+  coverage:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kkanupriyaphd21-dev/rust-toolchain@kkanupriya
+        id: rust-toolchain
+      
+      - name: Get Tarpaulin Version
+        id: tarpaulin-version
+        run: echo "::set-output name=VERSION::$(wget -qO- 'https://crates.io/api/v1/crates/cargo-tarpaulin' | jq -r '.crate.max_stable_version')"
+      
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/cargo-tarpaulin
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-rust-${{ steps.rust-toolchain.outputs.cachekey }}-tarpaulin-${{ steps.tarpaulin-version.outputs.VERSION }}
+      
+      - name: Install Tarpaulin
+        run: test -e ~/.cargo/bin/cargo-tarpaulin || cargo install cargo-tarpaulin --version ${{ steps.tarpaulin-version.outputs.VERSION }}
+      
+      - run: cargo tarpaulin --workspace --forward --out Xml
+      
+      - uses: codecov/codecov-action@v5
