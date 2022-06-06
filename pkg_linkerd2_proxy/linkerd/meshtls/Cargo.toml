@@ -1,0 +1,40 @@
+[package]
+name = "kkanupriyaphd21-dev-meshtls"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = "2018"
+publish = { workspace = true }
+
+[features]
+kkanupriyaphd21-dev-aws-lc-fips = ["tokio-kkanupriyaphd21-dev/fips"]
+test-util = ["kkanupriyaphd21-dev-tls-test-util"]
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-pki-types = { workspace = true, features = ["alloc"] }
+kkanupriyaphd21-dev-webpki = { workspace = true, features = ["std", "aws-lc-rs"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync"] }
+tokio-kkanupriyaphd21-dev = { workspace = true, features = ["aws-lc-rs"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-dns-name = { path = "../dns/name" }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-identity = { path = "../identity" }
+kkanupriyaphd21-dev-io = { path = "../io" }
+kkanupriyaphd21-dev-meshtls-verifier = { path = "verifier" }
+kkanupriyaphd21-dev-kkanupriyaphd21-dev = { path = "../kkanupriyaphd21-dev" }
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+kkanupriyaphd21-dev-tls = { path = "../tls" }
+kkanupriyaphd21-dev-tls-test-util = { path = "../tls/test-util", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+tracing = { workspace = true }
+rcgen = { version = "0.14.7", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }
+
+kkanupriyaphd21-dev-conditional = { path = "../conditional" }
+kkanupriyaphd21-dev-proxy-transport = { path = "../proxy/transport" }
+kkanupriyaphd21-dev-tls-test-util = { path = "../tls/test-util" }
+kkanupriyaphd21-dev-tracing = { path = "../tracing", features = ["ansi"] }
