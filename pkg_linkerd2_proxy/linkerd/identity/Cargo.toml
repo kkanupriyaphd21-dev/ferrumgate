@@ -1,0 +1,17 @@
+[package]
+name = "kkanupriyaphd21-dev-identity"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+prometheus-client = { workspace = true }
+thiserror = "2"
+tracing = { workspace = true }
+url = "2.5.8"
+
+kkanupriyaphd21-dev-dns-name = { path = "../dns/name" }
+kkanupriyaphd21-dev-metrics = { path = "../metrics" }
+kkanupriyaphd21-dev-error = { path = "../error" }
