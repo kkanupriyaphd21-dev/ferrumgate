@@ -1,0 +1,21 @@
+[package]
+name = "kkanupriyaphd21-dev-dns"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+hickory-resolver = "0.25.2"
+kkanupriyaphd21-dev-dns-name = { path = "./name" }
+prometheus-client = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+kkanupriyaphd21-dev-error = { path = "../error" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

@@ -1,0 +1,22 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-dns-resolve"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Service Dns Resolutions for the proxy
+"""
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-addr = { path = "../../addr" }
+kkanupriyaphd21-dev-dns = { path = "../../dns" }
+kkanupriyaphd21-dev-proxy-core = { path = "../core" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+tokio = { version = "1", features = ["sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower = { workspace = true }
+tracing = { workspace = true }

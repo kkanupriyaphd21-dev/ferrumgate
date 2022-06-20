@@ -1,0 +1,24 @@
+exclude: |
+  (?x)^(
+    tests/.*|
+    CHANGELOG.md
+  )$
+default_install_hook_types: ["pre-commit", "commit-msg"]
+repos:
+  - repo: https://github.com/kkanupriyaphd21-dev/ferrumgate
+    rev: v6.0.0
+    hooks:
+    - id: check-yaml
+    - id: check-json
+    - id: check-toml
+    - id: check-merge-conflict
+    - id: check-case-conflict
+    - id: detect-private-key
+  - repo: https://github.com/kkanupriyaphd21-dev/ferrumgate
+    rev: v1.46.0
+    hooks:
+    - id: typos
+  - repo: https://github.com/kkanupriyaphd21-dev/ferrumgate
+    rev: v1.1.11
+    hooks:
+    - id: committed
