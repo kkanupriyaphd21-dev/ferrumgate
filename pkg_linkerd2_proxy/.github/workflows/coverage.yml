@@ -1,0 +1,58 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTFLAGS: "-D warnings -A deprecated --cfg tokio_unstable -C debuginfo=2"
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  meta:
+    timeout-minutes: 5
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - id: changed
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96
+        with:
+          files: |
+            .codecov.yml
+            .github/workflows/coverage.yml
+            **/*.rs
+          files_ignore: |
+            *-proto/**
+            kkanupriyaphd21-dev/transport-header/**
+    outputs:
+      any_changed: ${{ steps.changed.outputs.any_changed }}
+
+  codecov:
+    needs: meta
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || needs.meta.outputs.any_changed == 'true'
+    runs-on: ${{ vars.kkanupriyaphd21-dev2_PROXY_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    container:
+      image: docker://ghcr.io/kkanupriyaphd21-dev/dev:v48-rust
+      options: --security-opt seccomp=unconfined # 🤷
+    env:
+      CXX: "/usr/bin/clang++-19"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
+      - run: cargo tarpaulin --locked --workspace --exclude=kkanupriyaphd21-dev2-proxy --exclude=kkanupriyaphd21-dev-transport-header --exclude=spire-proto --no-run
+      - run: cargo tarpaulin --locked --workspace --exclude=kkanupriyaphd21-dev2-proxy --exclude=kkanupriyaphd21-dev-transport-header --exclude=spire-proto --skip-clean --ignore-tests --no-fail-fast --out=Xml
+        # Some tests are especially flakey in coverage tests. That's fine. We
+        # only really care to measure how much of our codebase is covered.
+        continue-on-error: true
+      - uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
