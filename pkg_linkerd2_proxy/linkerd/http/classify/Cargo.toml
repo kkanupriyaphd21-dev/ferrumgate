@@ -1,0 +1,24 @@
+[package]
+name = "kkanupriyaphd21-dev-http-classify"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+http = { workspace = true }
+http-body = { workspace = true }
+pin-project = "1"
+tokio = { version = "1", default-features = false }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tower-test = { workspace = true }
+kkanupriyaphd21-dev-http-box = { path = "../../http/box" }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }
