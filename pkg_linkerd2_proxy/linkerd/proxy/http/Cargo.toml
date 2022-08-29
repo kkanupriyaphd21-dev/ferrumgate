@@ -1,0 +1,66 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-http"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+HTTP-specific implementations that rely on other proxy infrastructure
+
+This should probably be decomposed into smaller, decoupled crates.
+"""
+
+[dependencies]
+drain = { workspace = true }
+futures = { version = "0.3", default-features = false }
+h2 = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true, features = [
+    "client",
+    "http1",
+    "http2",
+    "server",
+] }
+hyper-balance = { path = "../../../hyper-balance" }
+hyper-util = { workspace = true, default-features = false, features = [
+    "client",
+    "client-legacy",
+    "http1",
+    "service",
+    "tokio",
+    "tracing",
+] }
+pin-project = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+tower = { workspace = true, default-features = false }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-http-box = { path = "../../http/box" }
+kkanupriyaphd21-dev-http-classify = { path = "../../http/classify" }
+kkanupriyaphd21-dev-http-detect = { path = "../../http/detect" }
+kkanupriyaphd21-dev-http-h2 = { path = "../../http/h2" }
+kkanupriyaphd21-dev-http-insert = { path = "../../http/insert" }
+kkanupriyaphd21-dev-http-override-authority = { path = "../../http/override-authority" }
+kkanupriyaphd21-dev-http-retain = { path = "../../http/retain" }
+kkanupriyaphd21-dev-http-stream-timeouts = { path = "../../http/stream-timeouts" }
+kkanupriyaphd21-dev-http-upgrade = { path = "../../http/upgrade" }
+kkanupriyaphd21-dev-http-variant = { path = "../../http/variant" }
+kkanupriyaphd21-dev-io = { path = "../../io" }
+kkanupriyaphd21-dev-proxy-balance = { path = "../balance" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dev-dependencies]
+bytes = { workspace = true }
+http-body-util = { workspace = true, features = ["channel"] }
+tower-test = { workspace = true }
+kkanupriyaphd21-dev-tracing = { path = "../../tracing", features = ["ansi"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+
+[target.'cfg(fuzzing)'.dependencies]
+tokio-test = "0.4"
