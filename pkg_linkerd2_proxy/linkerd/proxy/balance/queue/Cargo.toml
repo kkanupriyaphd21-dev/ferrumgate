@@ -1,0 +1,28 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-balance-queue"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+parking_lot = "0.12"
+pin-project = "1"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+tokio-util = "0.7"
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../../error" }
+kkanupriyaphd21-dev-metrics = { path = "../../../metrics" }
+kkanupriyaphd21-dev-proxy-core = { path = "../../core" }
+kkanupriyaphd21-dev-pool = { path = "../../../pool" }
+kkanupriyaphd21-dev-stack = { path = "../../../stack" }
+
+[dev-dependencies]
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-test = "0.4"
+
+kkanupriyaphd21-dev-pool-mock = { path = "../../../pool/mock" }
+kkanupriyaphd21-dev-tracing = { path = "../../../tracing" }
