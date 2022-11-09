@@ -1,0 +1,27 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-api-resolve"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Implements the Resolve trait using the proxy's gRPC API
+"""
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev2-proxy-api = { workspace = true, features = ["destination"] }
+kkanupriyaphd21-dev-addr = { path = "../../addr" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-proxy-core = { path = "../core" }
+kkanupriyaphd21-dev-http-h2 = { path = "../../http/h2" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+kkanupriyaphd21-dev-tonic-stream = { path = "../../tonic-stream" }
+kkanupriyaphd21-dev-tls = { path = "../../tls" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+http = { workspace = true }
+http-body = { workspace = true }
+tonic = { workspace = true, default-features = false }
+tower = { workspace = true, default-features = false }
+tracing = { workspace = true }
