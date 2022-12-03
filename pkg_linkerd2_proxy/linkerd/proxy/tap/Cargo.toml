@@ -1,0 +1,36 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-tap"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true, features = ["http1", "http2"] }
+hyper-util = { workspace = true, features = ["service", "tokio", "tracing"] }
+futures = { version = "0.3", default-features = false }
+ipnet = "2.11"
+kkanupriyaphd21-dev2-proxy-api = { workspace = true, features = ["tap"] }
+kkanupriyaphd21-dev-conditional = { path = "../../conditional" }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-meshtls = { path = "../../meshtls" }
+kkanupriyaphd21-dev-io = { path = "../../io" }
+kkanupriyaphd21-dev-proxy-http = { path = "../http" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+kkanupriyaphd21-dev-tls = { path = "../../tls" }
+parking_lot = "0.12"
+prost-types = { workspace = true }
+thiserror = "2"
+tokio = { version = "1", features = ["time"] }
+tower = { workspace = true, default-features = false }
+tonic = { workspace = true, default-features = false, features = ["codegen"] }
+tracing = { workspace = true }
+pin-project = "1"
+
+[dev-dependencies]
+kkanupriyaphd21-dev2-proxy-api = { workspace = true, features = ["arbitrary"] }
+quickcheck = { version = "1", default-features = false }
