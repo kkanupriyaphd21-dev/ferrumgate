@@ -1,0 +1,14 @@
+[package]
+name = "kkanupriyaphd21-dev-kkanupriyaphd21-dev"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = "2018"
+publish = { workspace = true }
+
+[features]
+kkanupriyaphd21-dev-aws-lc-fips = ["tokio-kkanupriyaphd21-dev/fips"]
+
+[dependencies]
+kkanupriyaphd21-dev-webpki = { workspace = true, features = ["std", "aws-lc-rs"] }
+tokio-kkanupriyaphd21-dev = { workspace = true, features = ["aws-lc-rs"] }

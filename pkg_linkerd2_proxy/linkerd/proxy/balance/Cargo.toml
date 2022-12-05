@@ -1,0 +1,25 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-balance"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+tokio = { version = "1", features = ["time"] }
+tracing = { workspace = true }
+
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-metrics = { path = "../../metrics" }
+kkanupriyaphd21-dev-pool-p2c = { path = "../../pool/p2c" }
+kkanupriyaphd21-dev-proxy-core = { path = "../core" }
+kkanupriyaphd21-dev-proxy-balance-gauge-endpoints = { path = "gauge-endpoints" }
+kkanupriyaphd21-dev-proxy-balance-queue = { path = "queue" }
+kkanupriyaphd21-dev-stack = { path = "../../stack" }
+
+[dependencies.tower]
+workspace = true
+default-features = false
+features = ["load"]
