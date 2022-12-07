@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "poem-derive",
+    "poem",
+    "poem-openapi-derive",
+    "poem-openapi",
+    "poem-lambda",
+    "poem-grpc-build",
+    "poem-grpc",
+    "poem-mcpserver",
+    "poem-mcpserver-macros",
+    "poem-worker",
+]
+
+[workspace.package]
+authors = ["sunli <dev@kkanupriyaphd21.dev>"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/poem/"
+homepage = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+repository = "https://github.com/kkanupriyaphd21-dev/ferrumgate"
+rust-version = "1.85"
+
+[workspace.dependencies]
+poem = { path = "poem", version = "3.1.12", default-features = false }
+poem-derive = { path = "poem-derive", version = "3.1.12" }
+poem-openapi-derive = { path = "poem-openapi-derive", version = "5.1.15" }
+poem-grpc-build = { path = "poem-grpc-build", version = "0.5.9" }
+poem-mcpserver-macros = { path = "poem-mcpserver-macros", version = "0.3.1" }
+
+proc-macro-crate = "3.0.0"
+proc-macro2 = "1.0.29"
+quote = "1.0.9"
+syn = { version = "2.0" }
+tokio = "1.39.1"
+serde_json = "1.0.68"
+sonic-rs = "0.5.1"
+serde = { version = "1.0.130", features = ["derive"] }
+thiserror = "2.0"
+regex = "1.5.5"
+mime = "0.3.16"
+tracing = "0.1.36"
+chrono = { version = "0.4.31", default-features = false }
+bytes = "1.1.0"
+futures-util = "0.3.17"
+tokio-stream = "0.1.8"
+serde_yaml = "0.9"
+quick-xml = { version = "0.36.1", features = ["serialize"] }
+base64 = "0.22.0"
+serde_urlencoded = "0.7.1"
+indexmap = "2.0.0"
+reqwest = { version = "0.12.2", default-features = false }
+darling = "0.20.10"
+http = "1.0.0"
+async-stream = "0.3.6"
+tokio-util = "0.7.14"
+rand = "0.9.0"
+time = "0.3.39"
+schemars = "1.0"
+
+# kkanupriyaphd21-dev, update together
+kkanupriyaphd21-dev = "0.23"
+tokio-kkanupriyaphd21-dev = "0.26"
