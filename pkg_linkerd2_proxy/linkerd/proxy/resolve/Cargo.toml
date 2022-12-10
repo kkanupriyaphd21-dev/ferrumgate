@@ -1,0 +1,19 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-resolve"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Utilities for working with `Resolve` implementations
+"""
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-proxy-core = { path = "../core" }
+thiserror = "2"
+tower = { workspace = true }
+tracing = { workspace = true }
+pin-project = "1"
