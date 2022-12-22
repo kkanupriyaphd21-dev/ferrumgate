@@ -1,0 +1,26 @@
+[package]
+name = "kkanupriyaphd21-dev-proxy-spire-client"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-error = { path = "../../error" }
+kkanupriyaphd21-dev-proxy-http = { path = "../../proxy/http" }
+kkanupriyaphd21-dev-identity = { path = "../../identity" }
+spiffe-proto = { path = "../../../spiffe-proto" }
+kkanupriyaphd21-dev-tonic-watch = { path = "../../tonic-watch" }
+kkanupriyaphd21-dev-exp-backoff = { path = "../../exp-backoff" }
+tokio = { version = "1", features = ["time", "sync"] }
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+x509-parser = "0.18.1"
+asn1 = { version = "0.6", package = "simple_asn1" }
+thiserror = "2"
+
+[dev-dependencies]
+rcgen = { version = "0.14.7", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }

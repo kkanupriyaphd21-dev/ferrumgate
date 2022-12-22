@@ -1,0 +1,21 @@
+[package]
+name = "kkanupriyaphd21-dev-tls-route"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[features]
+proto = ["kkanupriyaphd21-dev2-proxy-api"]
+
+[dependencies]
+thiserror = "2"
+tracing = { workspace = true }
+kkanupriyaphd21-dev-tls = { path = "../" }
+kkanupriyaphd21-dev-dns = { path = "../../dns" }
+
+[dependencies.kkanupriyaphd21-dev2-proxy-api]
+workspace = true
+optional = true
+features = ["outbound"]
