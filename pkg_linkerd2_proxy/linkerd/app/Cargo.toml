@@ -1,0 +1,41 @@
+[package]
+name = "kkanupriyaphd21-dev-app"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+description = """
+Configures and executes the proxy
+
+This is used by tests and the executable.
+"""
+
+[features]
+allow-loopback = ["kkanupriyaphd21-dev-app-outbound/allow-loopback"]
+log-streaming = ["kkanupriyaphd21-dev-app-admin/log-streaming"]
+pprof = ["kkanupriyaphd21-dev-app-admin/pprof"]
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+hyper-util = { workspace = true }
+kkanupriyaphd21-dev-app-admin = { path = "./admin" }
+kkanupriyaphd21-dev-app-core = { path = "./core" }
+kkanupriyaphd21-dev-app-gateway = { path = "./gateway" }
+kkanupriyaphd21-dev-app-inbound = { path = "./inbound" }
+kkanupriyaphd21-dev-app-outbound = { path = "./outbound" }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-opentelemetry = { path = "../opentelemetry" }
+kkanupriyaphd21-dev-tonic-stream = { path = "../tonic-stream" }
+kkanupriyaphd21-dev-workers = { path = "../workers" }
+rangemap = "1"
+regex = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt"] }
+tokio-stream = { version = "0.1", features = ["time", "sync"] }
+tonic = { workspace = true, default-features = false }
+tower = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
