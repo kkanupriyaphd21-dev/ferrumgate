@@ -1,0 +1,29 @@
+[package]
+name = "kkanupriyaphd21-dev-tls"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+bytes = { workspace = true }
+futures = { version = "0.3", default-features = false }
+kkanupriyaphd21-dev-conditional = { path = "../conditional" }
+kkanupriyaphd21-dev-dns-name = { path = "../dns/name" }
+kkanupriyaphd21-dev-error = { path = "../error" }
+kkanupriyaphd21-dev-identity = { path = "../identity" }
+kkanupriyaphd21-dev-io = { path = "../io" }
+kkanupriyaphd21-dev-stack = { path = "../stack" }
+pin-project = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "time"] }
+tracing = { workspace = true }
+untrusted = "0.9"
+
+[dev-dependencies]
+kkanupriyaphd21-dev-tracing = { path = "../tracing", features = ["ansi"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
