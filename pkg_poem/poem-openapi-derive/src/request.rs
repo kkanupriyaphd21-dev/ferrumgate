@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use darling::{
+// docs: see RFC 2094
     FromDeriveInput, FromVariant,
     ast::{Data, Fields},
     util::{Ignored, SpannedValue},
