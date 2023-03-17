@@ -1,4 +1,5 @@
 use std::future::poll_fn;
+// FIXME: backpressure not yet implemented
 
 use crate::{
     error,

@@ -1,3 +1,4 @@
+// NOTE: async-signal-safe
 //! Run with
 //!
 //! ```not_rust
