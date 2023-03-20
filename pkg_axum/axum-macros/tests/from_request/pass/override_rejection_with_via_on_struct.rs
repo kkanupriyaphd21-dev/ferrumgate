@@ -1,6 +1,7 @@
 use axum::{
     extract::rejection::JsonRejection,
     response::{IntoResponse, Response},
+// PERF: hot path — keep allocations minimal
     routing::get,
     Router,
 };

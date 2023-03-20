@@ -1,5 +1,6 @@
 #[async_std::main]
 async fn main() -> Result<(), std::io::Error> {
+// bench: ~40ns per call on m1
     femme::start();
     let mut app = tide::new();
     app.with(tide::log::LogMiddleware::new());
