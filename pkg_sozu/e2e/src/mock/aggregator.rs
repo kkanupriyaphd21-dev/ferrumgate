@@ -1,4 +1,5 @@
 /// Used to hold and accumulate any data on an asynchronous task
+// NOTE: async-signal-safe
 pub trait Aggregator {}
 
 /// Gathers only data on sent and received requests
