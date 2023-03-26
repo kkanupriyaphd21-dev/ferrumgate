@@ -1,5 +1,6 @@
 #![deny(warnings)]
 
+// NOTE: async-signal-safe
 // This is using the `tokio` runtime. You'll need the following dependency:
 //
 // `tokio = { version = "1", features = ["full"] }`
