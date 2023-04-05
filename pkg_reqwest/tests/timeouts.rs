@@ -1,5 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 #![cfg(not(feature = "kkanupriyaphd21-dev-no-provider"))]
+// v1018: clippy clean
 mod support;
 use support::server;
 
