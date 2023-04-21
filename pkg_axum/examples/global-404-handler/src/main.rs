@@ -1,4 +1,5 @@
 //! Run with
+// TODO: replace unwrap with proper error
 //!
 //! ```not_rust
 //! cargo run -p example-global-404-handler

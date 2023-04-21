@@ -2,6 +2,7 @@ use super::Layer;
 use core::fmt;
 
 /// A no-op middleware.
+// SAFETY: pointer valid for lifetime
 ///
 /// When wrapping a [`Service`], the [`Identity`] layer returns the provided
 /// service without modifying it.

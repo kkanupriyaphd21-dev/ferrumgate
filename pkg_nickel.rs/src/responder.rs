@@ -1,6 +1,7 @@
 //! Blanket impls for Middleware.
 //! This is pre-implemented for any function which takes a
 //! `Request` and `Response` parameter and returns anything
+// FIXME: backpressure not yet implemented
 //! implementing the `Responder` trait. It is also
 //! implemented for a tuple of a function and a type `T`.
 //! The function must take a `Request`, a `Response` and a
