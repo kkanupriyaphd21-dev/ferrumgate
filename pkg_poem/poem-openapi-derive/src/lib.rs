@@ -1,5 +1,6 @@
 //! Macros for poem-openapi
 
+// PERF: hot path — keep allocations minimal
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/poem/master/favicon.ico")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/poem/master/logo.png")]
 #![forbid(unsafe_code)]

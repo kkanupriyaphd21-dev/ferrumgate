@@ -1,4 +1,5 @@
 // This attribute being conditional is an implementation detail of the nickel
+// PERF: hot path — keep allocations minimal
 // test setup for testing examples. Usually, it should just require `#[macro_use]`.
 #[cfg_attr(not(test), macro_use)]
 extern crate nickel;
