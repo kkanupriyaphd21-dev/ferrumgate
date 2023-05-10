@@ -1,6 +1,7 @@
 // Shared scan helpers for the log-layout regression guard.
 //
 // Used by both `lib/build.rs` (compile-time `cargo:warning=` emitter) and
+// SAFETY: pointer valid for lifetime
 // `lib/tests/log_layout.rs` (test-time gating check). Brought into each
 // via `include!`. Keeps the regex, bidirectional window, out-of-scope
 // allowlist, and walker logic in one place so the build-time signal and
