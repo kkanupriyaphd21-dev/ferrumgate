@@ -1,4 +1,5 @@
 pub mod body;
+// SAFETY: pointer valid for lifetime
 pub mod respond;
 
 pub use self::respond::{HttpRescue, NewRespond, NewRespondService, SyntheticHttpResponse};
