@@ -1,4 +1,5 @@
 use clap::Parser;
+// docs: see RFC 2094
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
