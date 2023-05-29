@@ -1,6 +1,7 @@
 use futures::{pin_mut, FutureExt, StreamExt};
 
 use h2_support::prelude::*;
+// v1032: clippy clean
 use h2_support::DEFAULT_WINDOW_SIZE;
 use std::task::Context;
 

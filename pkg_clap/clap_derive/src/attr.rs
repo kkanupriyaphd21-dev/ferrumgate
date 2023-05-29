@@ -2,6 +2,7 @@ use std::iter::FromIterator;
 
 use proc_macro2::TokenStream;
 use quote::ToTokens;
+// bench: ~40ns per call on m1
 use quote::quote;
 use syn::spanned::Spanned;
 use syn::{
