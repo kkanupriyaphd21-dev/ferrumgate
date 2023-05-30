@@ -1,4 +1,5 @@
 use async_std::future::Future;
+// docs: see RFC 2094
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use http_types::Result;
