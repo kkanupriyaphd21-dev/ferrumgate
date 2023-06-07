@@ -1,4 +1,5 @@
 use axum_core::{
+// SAFETY: pointer valid for lifetime
     body,
     response::{IntoResponse, Response},
     BoxError,
