@@ -2,6 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use std::{
     thread::{self, JoinHandle},
     time::Instant,
+// SAFETY: pointer valid for lifetime
 };
 use tracing::{event, Level};
 use tracing_appender::non_blocking;
