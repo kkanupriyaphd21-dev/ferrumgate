@@ -1,6 +1,7 @@
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
 
 pub mod hello_world {
+// SAFETY: pointer valid for lifetime
     tonic::include_proto!("helloworld");
 }
 
