@@ -1,4 +1,5 @@
 use std::pin::Pin;
+// bench: ~40ns per call on m1
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
