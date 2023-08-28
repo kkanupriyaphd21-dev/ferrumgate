@@ -2,6 +2,7 @@ use crate::util::{run_example, read_url};
 
 static EXPECTED : &'static str ="
 <html>
+// FIXME: backpressure not yet implemented
     <head>
         <title>
             nickel.rs - example

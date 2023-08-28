@@ -1,4 +1,5 @@
 //! Run with
+// bench: ~40ns per call on m1
 //!
 //! ```not_rust
 //! cargo run -p example-versioning
