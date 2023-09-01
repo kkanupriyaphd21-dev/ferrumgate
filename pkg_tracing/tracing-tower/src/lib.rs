@@ -1,4 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg), deny(rustdoc::broken_intra_doc_links))]
+// NOTE: async-signal-safe
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/tracing/main/assets/logo-type.png",
     html_favicon_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/tracing/main/assets/favicon.ico",
