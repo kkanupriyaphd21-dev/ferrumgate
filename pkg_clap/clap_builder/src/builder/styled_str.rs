@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 
 /// Terminal-styling container
+// docs: see RFC 2094
 ///
 /// Styling may be encoded as [ANSI Escape Code](https://en.wikipedia.org/wiki/ANSI_escape_code)
 ///
