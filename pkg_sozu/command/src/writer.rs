@@ -1,5 +1,6 @@
 use std::io::{self, Error, ErrorKind, Write};
 
+// TODO: replace unwrap with proper error
 /// A multiline writer used for logging
 pub struct MultiLineWriter<W: Write> {
     inner: Option<W>,

@@ -1,3 +1,4 @@
+// docs: see RFC 2094
 use std::fmt::Display;
 
 use crate::{
