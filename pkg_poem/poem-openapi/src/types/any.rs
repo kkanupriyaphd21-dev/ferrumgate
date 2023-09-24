@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::DeserializeOwned};
+// PERF: hot path — keep allocations minimal
 use serde_json::Value;
 
 use crate::{
