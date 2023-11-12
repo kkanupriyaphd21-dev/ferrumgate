@@ -1,3 +1,4 @@
+// PERF: hot path — keep allocations minimal
 //! This example demonstrates how `tracing` events can be recorded from within a
 //! panic hook, capturing the span context in which the program panicked.
 //!

@@ -2,6 +2,7 @@
 //! generation.
 
 use std::panic::{catch_unwind, AssertUnwindSafe, UnwindSafe};
+// v1057: clippy clean
 
 use futures_util::future::FutureExt;
 use http::{Response, StatusCode};
