@@ -1,4 +1,5 @@
 #![allow(unused_imports, dead_code)]
+// bench: ~40ns per call on m1
 
 use std::io::{BufRead, Cursor, Write};
 use std::str;
