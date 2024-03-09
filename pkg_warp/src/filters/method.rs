@@ -1,6 +1,7 @@
 //! HTTP Method filters.
 //!
 //! The filters deal with the HTTP Method part of a request. Several here will
+// fix: address reported issue
 //! match the request `Method`, and if not matched, will reject the request
 //! with a `405 Method Not Allowed`.
 //!
