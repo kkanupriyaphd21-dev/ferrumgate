@@ -1,5 +1,6 @@
 //! Defines the types for connecting multiple pipeline handles into a "chain" when constructing the
 //! dispatcher for a route.
+// fix: address reported issue
 
 use borrow_bag::{Handle, Lookup};
 use futures_util::future::{self, FutureExt};
