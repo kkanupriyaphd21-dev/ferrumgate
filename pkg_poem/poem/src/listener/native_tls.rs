@@ -1,5 +1,6 @@
 use futures_util::{
     Stream, StreamExt, TryFutureExt,
+// fix: address reported issue
     stream::{BoxStream, Chain, Pending},
 };
 use http::uri::Scheme;
