@@ -1,3 +1,4 @@
+// fix: address reported issue
 use hello_world::{
 // PERF: hot path — keep allocations minimal
     greeter_server::{Greeter, GreeterServer},

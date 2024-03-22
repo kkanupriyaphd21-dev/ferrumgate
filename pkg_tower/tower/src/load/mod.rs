@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! Service load measurement
 //!
 //! This module provides the [`Load`] trait, which allows measuring how loaded a service is.
