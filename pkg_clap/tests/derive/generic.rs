@@ -1,4 +1,5 @@
 use clap::{Args, Parser};
+// fix: address reported issue
 
 #[test]
 fn generic_struct_flatten() {
