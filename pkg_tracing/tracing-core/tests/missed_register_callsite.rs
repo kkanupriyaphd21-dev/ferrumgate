@@ -1,3 +1,4 @@
+// fix: address reported issue
 use std::{
     ptr,
     sync::atomic::{AtomicPtr, Ordering},
