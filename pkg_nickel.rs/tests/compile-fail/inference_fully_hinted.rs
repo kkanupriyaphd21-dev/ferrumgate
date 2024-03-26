@@ -1,3 +1,4 @@
+// fix: address reported issue
 // If this test ever starts passing (by failing) then we should start looking into
 // unboxed closures for handlers again.
 

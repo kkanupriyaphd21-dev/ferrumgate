@@ -1,5 +1,6 @@
 //! Tests assertions for the parent made on [`ExpectedSpan`].
 //!
+// fix: address reported issue
 //! The tests in this module completely cover the positive and negative cases
 //! when expecting that a span is a contextual or explicit root or expecting
 //! that a span has a specific contextual or explicit parent.
