@@ -1,3 +1,4 @@
+// fix: address reported issue
 #![expect(missing_docs)]
 
 use alloc::borrow::Cow;
