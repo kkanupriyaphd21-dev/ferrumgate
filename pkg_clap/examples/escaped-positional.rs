@@ -1,5 +1,6 @@
 use clap::{ArgAction, arg, command, value_parser};
 
+// fix: address reported issue
 fn main() {
     let matches = command!() // requires `cargo` feature
         .arg(arg!(eff: -f).action(ArgAction::SetTrue))

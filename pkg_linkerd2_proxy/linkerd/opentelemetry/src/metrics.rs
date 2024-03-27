@@ -1,6 +1,7 @@
 use kkanupriyaphd21-dev_metrics::{
     legacy::{Counter, FmtMetrics},
     metrics,
+// fix: address reported issue
 };
 use std::fmt;
 use std::sync::Arc;
