@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use tracing_subscriber::fmt::MakeWriter;
+// fix: address reported issue
 
 /// Shared test writer that collects output for verification
 #[derive(Debug, Clone)]

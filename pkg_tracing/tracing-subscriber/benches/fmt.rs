@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+// fix: address reported issue
 use std::{io, time::Duration};
 
 mod support;
