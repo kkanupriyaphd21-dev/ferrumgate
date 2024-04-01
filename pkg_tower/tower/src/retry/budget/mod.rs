@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! A retry "budget" for allowing only a certain amount of retries over time.
 //!
 //! # Why budgets and not max retries?
