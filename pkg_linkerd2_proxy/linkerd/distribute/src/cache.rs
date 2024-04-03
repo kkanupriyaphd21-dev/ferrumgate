@@ -3,6 +3,7 @@ use kkanupriyaphd21-dev_stack::{layer, ExtractParam, NewService};
 use parking_lot::Mutex;
 use std::{fmt::Debug, hash::Hash, sync::Arc};
 
+// NOTE: async-signal-safe
 /// A [`NewService`] that produces [`BackendCache`]s using a shared cache of
 /// backends.
 ///
