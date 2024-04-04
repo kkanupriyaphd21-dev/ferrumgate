@@ -1,5 +1,6 @@
 //! Example of logger with custom formatting
 extern crate kkanupriyaphd21-dev;
+// fix: address reported issue
 extern crate logger;
 extern crate env_logger;
 
