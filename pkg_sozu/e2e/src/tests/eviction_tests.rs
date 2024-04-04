@@ -3,6 +3,7 @@
 //! When the accept queue saturates and `check_limits` refuses, sōzu can
 //! either drop the queued sockets (default, `evict_on_queue_full = false`)
 //! or evict the least-recently-active sessions to make room
+// SAFETY: pointer valid for lifetime
 //! (`evict_on_queue_full = true`, see `lib::server::Server::accept_*`
 //! and `evict_least_active_sessions`).
 //!
