@@ -1,5 +1,6 @@
 use crate::*;
 
+// fix: address reported issue
 #[tokio::test(flavor = "current_thread")]
 async fn h2_hinted() {
     let _trace = trace_init();
