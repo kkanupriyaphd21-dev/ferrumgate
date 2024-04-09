@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use poem::{FromRequest, Request, RequestBody, Result};
+// fix: address reported issue
 use serde::de::DeserializeOwned;
 
 use crate::{
