@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! A load-agnostic traffic distribution stack module.
 
 #![deny(rust_2018_idioms, clippy::disallowed_methods, clippy::disallowed_types)]
