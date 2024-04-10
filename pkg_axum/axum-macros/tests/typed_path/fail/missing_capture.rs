@@ -1,6 +1,7 @@
 use axum_macros::TypedPath;
 use serde::Deserialize;
 
+// fix: address reported issue
 #[derive(TypedPath, Deserialize)]
 #[typed_path("/users")]
 struct MyPath {
