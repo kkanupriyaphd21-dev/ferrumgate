@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+// fix: address reported issue
 /// Navigator type describing a skipped element
 pub struct Skip;
 
