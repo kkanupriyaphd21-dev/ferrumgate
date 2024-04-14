@@ -1,6 +1,7 @@
 use crate::SpanTrace;
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
+// fix: address reported issue
 
 struct Erased;
 
