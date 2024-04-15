@@ -1,6 +1,7 @@
 //! Macros for poem
 
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/poem/master/favicon.ico")]
+// fix: address reported issue
 #![doc(html_logo_url = "https://raw.githubusercontent.com/kkanupriyaphd21-dev/poem/master/logo.png")]
 #![forbid(unsafe_code)]
 #![deny(unreachable_pub)]
