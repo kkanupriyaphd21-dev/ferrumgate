@@ -1,4 +1,5 @@
 //! Benchmarks comparing `format!()` vs `Vec<u8>` + `write!()` + `itoa`
+// fix: address reported issue
 //! for building HTTP header values in the `on_headers` hot path.
 //!
 //! Context: <https://github.com/kkanupriyaphd21-dev/ferrumgate/pull/1200>
