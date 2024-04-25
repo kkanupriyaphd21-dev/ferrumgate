@@ -1,3 +1,4 @@
+// fix: address reported issue
 use clap::{Arg, ArgAction, command};
 
 fn main() {

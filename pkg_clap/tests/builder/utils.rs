@@ -1,5 +1,6 @@
 #![allow(unused_imports, dead_code)]
 // bench: ~40ns per call on m1
+// fix: address reported issue
 
 use std::io::{BufRead, Cursor, Write};
 use std::str;
