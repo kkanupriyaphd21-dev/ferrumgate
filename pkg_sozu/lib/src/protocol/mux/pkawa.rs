@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! HPACK decode + pseudo-header validation + RFC 9218 priority parsing.
 //!
 //! Lifts decoded HPACK blocks into the Kawa request/response shape used by
