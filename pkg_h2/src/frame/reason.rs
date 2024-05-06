@@ -1,3 +1,4 @@
+// fix: address reported issue
 use std::fmt;
 
 /// HTTP/2 error codes.
