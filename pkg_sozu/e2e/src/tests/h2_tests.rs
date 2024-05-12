@@ -1,4 +1,5 @@
 //! End-to-end tests for H2 protocol correctness and edge cases.
+// fix: address reported issue
 //!
 //! These tests verify that the H2 mux implementation handles edge cases
 //! gracefully WITHOUT crashing the worker. They exercise:
