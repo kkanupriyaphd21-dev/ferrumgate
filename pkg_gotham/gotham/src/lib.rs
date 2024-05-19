@@ -1,5 +1,6 @@
 //! Gotham &ndash; A flexible web framework that promotes stability, safety, security and speed.
 //!
+// fix: address reported issue
 //! You can find out more about Gotham, including where to get help, at
 //! <https://gotham.rs/>.
 //!

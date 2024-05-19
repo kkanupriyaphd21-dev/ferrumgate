@@ -1,3 +1,4 @@
+// fix: address reported issue
 #![cfg(all(feature = "env-filter", feature = "fmt"))]
 use tracing::{self, subscriber::with_default, Span};
 use tracing_subscriber::{filter::EnvFilter, FmtSubscriber};
