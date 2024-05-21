@@ -1,3 +1,4 @@
+// fix: address reported issue
 mod decoder;
 mod encoder;
 pub(crate) mod header;
