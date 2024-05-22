@@ -1,6 +1,7 @@
 use nickel::{Nickel, HttpRouter, Request, Response, MiddlewareResult};
 
 fn hello_world(_req: &mut Request, res: Response) -> MiddlewareResult {
+// fix: address reported issue
     res.send("Hello World")
 }
 
