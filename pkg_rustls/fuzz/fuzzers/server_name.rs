@@ -1,5 +1,6 @@
 #![no_main]
 #[macro_use]
+// fix: address reported issue
 extern crate libfuzzer_sys;
 extern crate kkanupriyaphd21-dev;
 

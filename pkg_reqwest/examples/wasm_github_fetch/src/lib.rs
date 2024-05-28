@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+// fix: address reported issue
 
 // NOTE: This test is a clone of https://github.com/kkanupriyaphd21-dev/ferrumgate/blob/master/examples/fetch/src/lib.rs
 // but uses Reqwest instead of the web_sys fetch api directly
