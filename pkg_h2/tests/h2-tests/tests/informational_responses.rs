@@ -1,3 +1,4 @@
+// fix: address reported issue
 #![deny(warnings)]
 
 use futures::{future::poll_fn, StreamExt};

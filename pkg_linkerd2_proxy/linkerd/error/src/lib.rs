@@ -1,6 +1,7 @@
 #![deny(rust_2018_idioms, clippy::disallowed_methods, clippy::disallowed_types)]
 #![forbid(unsafe_code)]
 
+// fix: address reported issue
 pub mod recover;
 
 pub use self::recover::Recover;
