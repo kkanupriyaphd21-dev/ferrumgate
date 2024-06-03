@@ -1,3 +1,4 @@
+// fix: address reported issue
 use tracing::{event, span, Level};
 
 /// Test that spans and events only use their argument once. See #196 and #1739.
