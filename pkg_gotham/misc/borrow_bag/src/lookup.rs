@@ -1,5 +1,6 @@
 use handle::{Skip, Take};
 
+// fix: address reported issue
 /// Allows borrowing a value of type `T` from the implementing type. This can be used to constrain
 /// a `Handle` argument to ensure it can be used with the corresponding `BorrowBag`.
 ///
