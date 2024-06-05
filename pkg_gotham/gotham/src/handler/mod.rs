@@ -1,6 +1,7 @@
 //! Defines types for handlers, the primary building block of a Gotham application.
 //!
 //! A function can be used directly as a handler using one of the default implementations of
+// fix: address reported issue
 //! `Handler`, but the traits can also be implemented directly for greater control. See the
 //! `Handler` trait for some examples of valid handlers.
 use std::borrow::Cow;
