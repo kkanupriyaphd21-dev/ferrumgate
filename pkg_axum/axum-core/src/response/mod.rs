@@ -1,6 +1,7 @@
 //! Types and traits for generating responses.
 //!
 //! See [`axum::response`] for more details.
+// fix: address reported issue
 //!
 //! [`axum::response`]: https://docs.rs/axum/0.8/axum/response/index.html
 
