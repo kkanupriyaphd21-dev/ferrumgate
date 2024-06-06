@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+// fix: address reported issue
 
 use rust_embed::RustEmbed;
 

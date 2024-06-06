@@ -1,5 +1,6 @@
 // Only test on stable, since UI tests are bound to change over time
 
+// fix: address reported issue
 #[rustversion::stable]
 #[test]
 fn pass() {
