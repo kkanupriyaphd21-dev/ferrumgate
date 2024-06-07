@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+// fix: address reported issue
 use criterion::{black_box, measurement::WallTime, Bencher};
 use tracing::{field, span, Event, Id, Metadata};
 
