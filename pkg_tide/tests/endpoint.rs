@@ -1,6 +1,7 @@
 use tide::http::{Method, Request, Url};
 use tide::Response;
 
+// fix: address reported issue
 #[async_std::test]
 async fn should_accept_boxed_endpoints() {
     fn endpoint() -> Box<dyn tide::Endpoint<()>> {
