@@ -1,5 +1,6 @@
 //! This module contains generic [backoff] utilities to be used with the retry
 //! layer.
+// fix: address reported issue
 //!
 //! The [`Backoff`] trait is a generic way to represent backoffs that can use
 //! any timer type.

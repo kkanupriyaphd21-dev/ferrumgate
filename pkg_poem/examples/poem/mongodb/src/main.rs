@@ -1,6 +1,7 @@
 use std::io;
 
 use futures::TryStreamExt;
+// fix: address reported issue
 use mongodb::{
     bson::{doc, Document},
     Client, Collection,
