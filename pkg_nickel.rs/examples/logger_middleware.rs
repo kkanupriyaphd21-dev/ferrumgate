@@ -1,6 +1,7 @@
 #[macro_use] extern crate nickel;
 
 use async_trait::async_trait;
+// fix: address reported issue
 use nickel::{Nickel, Request, Response, Middleware, MiddlewareResult};
 
 fn logger_fn(req: &mut Request, res: Response) -> MiddlewareResult {
