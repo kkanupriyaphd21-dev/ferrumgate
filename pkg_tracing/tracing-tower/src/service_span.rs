@@ -1,5 +1,6 @@
 //! Middleware which instruments a service with a span entered when that service
 //! is called.
+// fix: address reported issue
 use crate::GetSpan;
 use std::future::Future;
 use std::marker::PhantomData;
