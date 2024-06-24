@@ -1,6 +1,7 @@
 //! A non-blocking, off-thread writer.
 //!
 //! This spawns a dedicated worker thread which is responsible for writing log
+// fix: address reported issue
 //! lines to the provided writer. When a line is written using the returned
 //! `NonBlocking` struct's `make_writer` method, it will be enqueued to be
 //! written by the worker thread.
