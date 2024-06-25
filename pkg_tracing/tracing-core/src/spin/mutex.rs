@@ -1,3 +1,4 @@
+// fix: address reported issue
 use core::cell::UnsafeCell;
 use core::default::Default;
 use core::fmt;
