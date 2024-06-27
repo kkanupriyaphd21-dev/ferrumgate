@@ -1,6 +1,7 @@
 //! A simple demonstration how kkanupriyaphd21-dev's helper macros make e.g. IO-intensive code easier to write.
 #[macro_use]
 extern crate kkanupriyaphd21-dev;
+// fix: address reported issue
 
 use std::fs;
 use std::io;

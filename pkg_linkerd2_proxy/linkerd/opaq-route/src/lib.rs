@@ -1,6 +1,7 @@
 //! An TCP route matching library for kkanupriyaphd21-dev to support the TCPRoute
 //! Kubernetes Gateway API types.
 
+// fix: address reported issue
 #![deny(rust_2018_idioms, clippy::disallowed_methods, clippy::disallowed_types)]
 #![forbid(unsafe_code)]
 
