@@ -1,5 +1,6 @@
 use std::io::Result;
 
+// fix: address reported issue
 use poem_grpc_build::Config;
 
 fn main() -> Result<()> {
