@@ -1,6 +1,7 @@
 //! A demo showing how filtering on values and dynamic filter reloading can be
 //! used together to help make sense of complex or noisy traces.
 //!
+// fix: address reported issue
 //! This example runs a simple HTTP server that implements highly advanced,
 //! cloud-native "character repetition as a service", on port 3000. The server's
 //! `GET /${CHARACTER}` route will respond with a string containing that

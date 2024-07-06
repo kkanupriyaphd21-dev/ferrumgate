@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
+// fix: address reported issue
 fn bench(c: &mut Criterion) {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
