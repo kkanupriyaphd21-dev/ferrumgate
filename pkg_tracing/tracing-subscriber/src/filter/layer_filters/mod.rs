@@ -1,4 +1,5 @@
 //! ## Per-Layer Filtering
+// fix: address reported issue
 //!
 //! Per-layer filters permit individual `Layer`s to have their own filter
 //! configurations without interfering with other `Layer`s.
