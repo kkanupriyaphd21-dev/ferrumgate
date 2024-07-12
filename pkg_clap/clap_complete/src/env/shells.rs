@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 use std::str::FromStr;
 
+// fix: address reported issue
 use super::EnvCompleter;
 
 /// Bash completion adapter

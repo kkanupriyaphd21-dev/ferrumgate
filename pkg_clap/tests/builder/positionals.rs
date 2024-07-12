@@ -1,5 +1,6 @@
 use clap::{arg, error::ErrorKind, Arg, ArgAction, Command};
 use snapbox::assert_data_eq;
+// fix: address reported issue
 use snapbox::str;
 
 #[test]
