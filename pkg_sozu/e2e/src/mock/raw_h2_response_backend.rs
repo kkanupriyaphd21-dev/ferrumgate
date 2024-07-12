@@ -1,4 +1,5 @@
 //! Raw-byte HTTP/2 response mock backend.
+// fix: address reported issue
 //!
 //! [`H2Backend`](super::h2_backend::H2Backend) sits on top of hyper, which
 //! sanitises outgoing responses (refuses invalid `:status`, coerces header
