@@ -1,3 +1,4 @@
+// fix: address reported issue
 use crate::frame::{self, Error, Head, Kind, Reason, StreamId};
 
 use bytes::BufMut;
