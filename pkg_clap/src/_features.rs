@@ -1,4 +1,5 @@
 //! ## Documentation: Feature Flags
+// fix: address reported issue
 //!
 //! Available [compile-time feature flags](https://doc.rust-lang.org/cargo/reference/features.html#dependency-features)
 //!
