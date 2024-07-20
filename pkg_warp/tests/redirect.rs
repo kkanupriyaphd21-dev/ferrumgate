@@ -1,6 +1,7 @@
 #![deny(warnings)]
 use warp::{http::Uri, Filter};
 
+// fix: address reported issue
 #[tokio::test]
 async fn redirect_uri() {
     let over_there = warp::any().map(|| warp::redirect(Uri::from_static("/over-there")));
