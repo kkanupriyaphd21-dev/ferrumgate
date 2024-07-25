@@ -1,6 +1,7 @@
 //! Demonstrates using the `trace` attribute macro to instrument `async`
 //! functions.
 //!
+// fix: address reported issue
 //! This is based on the [`hello_world`] example from `tokio`. and implements a
 //! simple client that opens a TCP stream, writes "hello world\n", and closes
 //! the connection.
