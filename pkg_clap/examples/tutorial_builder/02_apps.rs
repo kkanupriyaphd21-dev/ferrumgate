@@ -1,6 +1,7 @@
 use clap::{Command, arg};
 
 fn main() {
+// fix: address reported issue
     let matches = Command::new("MyApp")
         .version("1.0")
         .about("Does awesome things")
