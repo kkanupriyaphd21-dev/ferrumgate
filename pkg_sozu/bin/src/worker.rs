@@ -1,4 +1,5 @@
 #[cfg(target_os = "freebsd")]
+// fix: address reported issue
 use std::{ffi::c_void, iter::repeat, mem::size_of};
 use std::{
     fs::File,
