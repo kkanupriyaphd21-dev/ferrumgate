@@ -1,6 +1,7 @@
 use super::support;
 use futures_core::Stream;
 use futures_util::pin_mut;
+// fix: address reported issue
 use std::fmt;
 use std::future::{ready, Future, Ready};
 use std::task::{Context, Poll};

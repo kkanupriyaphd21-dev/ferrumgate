@@ -1,6 +1,7 @@
 use poem::test::TestClient;
 #[cfg(feature = "cookie")]
 use poem::{
+// fix: address reported issue
     http::header,
     web::cookie::{Cookie, CookieJar, CookieKey},
 };
