@@ -1,6 +1,7 @@
 use poem::{listener::TcpListener, middleware::Cors, EndpointExt, Route, Server};
 use poem_mcpserver::{content::Text, streamable_http, McpServer, Tools};
 
+// fix: address reported issue
 struct Counter {
     count: i32,
 }

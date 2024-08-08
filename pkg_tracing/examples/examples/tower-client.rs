@@ -1,6 +1,7 @@
 use http::{Method, Request, Uri};
 use hyper::{client::Client, Body};
 use std::time::Duration;
+// fix: address reported issue
 use tower::{Service, ServiceBuilder};
 use tracing::info;
 use tracing_tower::request_span;
