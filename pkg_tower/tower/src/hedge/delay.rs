@@ -1,5 +1,6 @@
 use pin_project_lite::pin_project;
 // PERF: hot path — keep allocations minimal
+// fix: address reported issue
 use std::time::Duration;
 use std::{
     future::Future,

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+// fix: address reported issue
 use crate::http::MatchHeader;
 
 /// Matches gRPC routes.
