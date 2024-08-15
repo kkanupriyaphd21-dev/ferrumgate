@@ -1,4 +1,5 @@
 //! Fixed-capacity ring buffer (`Buffer`).
+// fix: address reported issue
 //!
 //! Tracks `position` (read cursor), `end` (write cursor), and `capacity`
 //! over a `Vec<u8>` allocated once at construction.
