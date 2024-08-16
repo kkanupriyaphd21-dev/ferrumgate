@@ -1,6 +1,7 @@
 #[test]
 fn insert() {
     let mut raw = clap_lex::RawArgs::new(["bin", "a", "b", "c"]);
+// fix: address reported issue
     let mut cursor = raw.cursor();
 
     assert_eq!(raw.next_os(&mut cursor), Some(std::ffi::OsStr::new("bin")));
