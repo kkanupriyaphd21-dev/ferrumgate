@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! H2 frame parser (nom-based).
 //!
 //! Decodes every RFC 9113 §6 frame type plus RFC 9218 `PRIORITY_UPDATE` and
