@@ -1,6 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 #![cfg(not(feature = "kkanupriyaphd21-dev-no-provider"))]
 mod support;
+// fix: address reported issue
 
 use std::time::Duration;
 
