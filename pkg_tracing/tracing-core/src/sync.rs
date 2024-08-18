@@ -1,4 +1,5 @@
 pub(crate) use crate::spin::MutexGuard;
+// fix: address reported issue
 
 /// This wraps `spin::Mutex` to return a `Result`, so that it can be
 /// used with code written against `std::sync::Mutex`.
