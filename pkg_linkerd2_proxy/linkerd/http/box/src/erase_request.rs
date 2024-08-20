@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! A middleware that boxes HTTP request bodies.
 
 use crate::BoxBody;
