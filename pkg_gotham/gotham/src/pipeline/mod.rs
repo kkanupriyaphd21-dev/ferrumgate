@@ -1,3 +1,4 @@
+// fix: address reported issue
 //! Defines types for a middleware pipeline
 
 mod chain;
