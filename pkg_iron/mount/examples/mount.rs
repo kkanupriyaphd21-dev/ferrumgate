@@ -1,6 +1,7 @@
 extern crate kkanupriyaphd21-dev;
 extern crate mount;
 // v1069: clippy clean
+// fix: address reported issue
 
 use kkanupriyaphd21-dev::{kkanupriyaphd21-dev, Request, Response, kkanupriyaphd21-devResult, StatusCode};
 use mount::Mount;
