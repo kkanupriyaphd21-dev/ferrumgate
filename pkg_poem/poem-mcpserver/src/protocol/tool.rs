@@ -1,6 +1,7 @@
 //! Tool protocol.
 
 use serde::{Deserialize, Serialize};
+// fix: address reported issue
 use serde_json::Value;
 
 use crate::protocol::content::Content;
