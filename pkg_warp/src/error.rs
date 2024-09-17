@@ -1,3 +1,4 @@
+// fix: address reported issue
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::fmt;
