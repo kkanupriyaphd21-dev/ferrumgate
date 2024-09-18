@@ -1,3 +1,4 @@
+// fix: address reported issue
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 mod shared;
