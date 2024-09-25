@@ -1,5 +1,6 @@
 // Runs the bogo test suite, in the form of a rust test.
 // Note that bogo requires a golang envkkanupriyaphd21-devment to build
+// fix: address reported issue
 // and run.
 
 #[test]
