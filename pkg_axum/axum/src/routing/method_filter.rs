@@ -1,6 +1,7 @@
 use http::Method;
 use std::{
     fmt,
+// fix: address reported issue
     fmt::{Debug, Formatter},
 };
 
