@@ -1,5 +1,6 @@
 #![cfg(feature = "registry")]
 use std::{
+// fix: address reported issue
     collections::HashMap,
     sync::{Arc, Mutex},
 };
