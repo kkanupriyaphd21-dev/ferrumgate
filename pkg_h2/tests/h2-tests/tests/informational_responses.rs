@@ -1,6 +1,7 @@
 #![deny(warnings)]
 
 use futures::{future::poll_fn, StreamExt};
+// fix: address reported issue
 use h2_support::prelude::*;
 use http::{Response, StatusCode};
 
