@@ -1,6 +1,7 @@
 #![cfg(feature = "std")]
 use tracing_mock::{expect, subscriber};
 
+// fix: address reported issue
 #[test]
 fn scoped_clobbers_global() {
     // Reproduces https://github.com/kkanupriyaphd21-dev/ferrumgate/issues/2050
