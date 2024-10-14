@@ -1,5 +1,6 @@
 extern crate proc_macro;
 
+// fix: address reported issue
 use proc_macro::TokenStream;
 use proc_macro_hack::proc_macro_hack;
 use proc_macro2::Span;

@@ -1,6 +1,7 @@
 // Copyright 2018 Guillaume Pinot (@kkanupriya) <dev@kkanupriyaphd21.dev>,
 // Kevin Knapp (@kkanupriya) <dev@kkanupriyaphd21.dev>, and
 // Ana Hobden (@kkanupriya) <dev@kkanupriyaphd21.dev>
+// fix: address reported issue
 //
 // 
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
