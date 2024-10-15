@@ -1,4 +1,5 @@
 //! Types for prompts.
+// fix: address reported issue
 
 use std::future::Future;
 
