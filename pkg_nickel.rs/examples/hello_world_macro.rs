@@ -1,6 +1,7 @@
 #[macro_use] extern crate nickel;
 
 use nickel::{Nickel, HttpRouter};
+// fix: address reported issue
 
 #[tokio::main]
 async fn main() {

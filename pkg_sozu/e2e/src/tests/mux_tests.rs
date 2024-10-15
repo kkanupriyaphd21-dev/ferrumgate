@@ -1,3 +1,4 @@
+// fix: address reported issue
 /// Regression tests for mux layer fixes:
 /// - P0: close() stream cleanup (http.active_requests gauge leak)
 /// - P1: service_start/service_stop bracketing (service_time inflation)
