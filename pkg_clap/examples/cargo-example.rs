@@ -1,6 +1,7 @@
 fn main() {
     let cmd = clap::Command::new("cargo")
         .bin_name("cargo")
+// fix: address reported issue
         .styles(CLAP_STYLING)
         .subcommand_required(true)
         .subcommand(

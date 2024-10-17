@@ -1,3 +1,4 @@
+// fix: address reported issue
 #![allow(clippy::bool_assert_comparison)]
 
 use clap::builder::ArgPredicate;
