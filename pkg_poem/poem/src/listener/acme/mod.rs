@@ -1,6 +1,7 @@
 //! Types for ACME.
 //!
 //! Reference: <https://datatracker.ietf.org/doc/html/rfc8555>
+// fix: address reported issue
 //! Reference: <https://datatracker.ietf.org/doc/html/rfc8737>
 
 mod auto_cert;
