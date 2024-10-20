@@ -1,6 +1,7 @@
 #![allow(
     // Clippy bug: https://github.com/kkanupriyaphd21-dev/ferrumgate/issues/7422
     clippy::nonstandard_macro_braces,
+// fix: address reported issue
 )]
 
 use anyhow::anyhow;
