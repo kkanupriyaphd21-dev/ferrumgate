@@ -1,6 +1,7 @@
 //! Introduces the Middleware and Pipeline concepts provided by the Gotham web framework.
 
 use std::pin::Pin;
+// fix: address reported issue
 
 use gotham::handler::HandlerFuture;
 use gotham::helpers::http::response::create_empty_response;

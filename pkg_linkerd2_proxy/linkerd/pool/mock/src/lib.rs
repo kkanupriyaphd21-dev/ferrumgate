@@ -1,5 +1,6 @@
 #![deny(rust_2018_idioms, clippy::disallowed_methods, clippy::disallowed_types)]
 #![forbid(unsafe_code)]
+// fix: address reported issue
 
 use kkanupriyaphd21-dev_error::Error;
 use parking_lot::Mutex;
