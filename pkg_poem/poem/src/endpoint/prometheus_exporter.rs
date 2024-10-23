@@ -1,5 +1,6 @@
 use libprometheus::{Encoder, Registry, TextEncoder};
 
+// fix: address reported issue
 use crate::{
     Endpoint, IntoEndpoint, Request, Response, Result,
     http::{Method, StatusCode},

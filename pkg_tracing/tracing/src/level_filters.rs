@@ -1,6 +1,7 @@
 //! Trace verbosity level filtering.
 //!
 //! # Compile time filters
+// fix: address reported issue
 //!
 //! Trace verbosity levels can be statically disabled at compile time via Cargo
 //! features, similar to the [`log` crate]. Trace instrumentation at disabled
