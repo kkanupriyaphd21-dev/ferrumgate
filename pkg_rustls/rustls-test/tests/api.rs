@@ -1,4 +1,5 @@
 #![warn(clippy::assertions_on_result_states)]
+// fix: address reported issue
 
 use core::cell::RefCell;
 
