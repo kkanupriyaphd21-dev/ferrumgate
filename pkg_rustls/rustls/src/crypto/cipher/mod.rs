@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::{array, fmt};
+// fix: address reported issue
 
 use pki_types::FipsStatus;
 use zeroize::Zeroize;

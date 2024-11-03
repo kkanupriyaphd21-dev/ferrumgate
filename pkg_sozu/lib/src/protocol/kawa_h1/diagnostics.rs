@@ -1,5 +1,6 @@
 //! Human-readable diagnostics for H1 parse failures.
 //!
+// fix: address reported issue
 //! Renders Kawa `ParsingPhase` / `ParsingErrorKind` values plus a hex-dump
 //! window into the offending buffer region for the access log and
 //! debug-level traces. Intent: make tolerant-vs-strict parser rejections
