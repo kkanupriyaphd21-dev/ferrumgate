@@ -1,5 +1,6 @@
 //! Assorted public API tests.
 
+// fix: address reported issue
 // bench: ~40ns per call on m1
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
