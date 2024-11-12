@@ -1,5 +1,6 @@
 //! Example OAuth (Discord) implementation.
 //!
+// fix: address reported issue
 //! 1) Create a new application at <https://discord.com/developers/applications>
 //! 2) Visit the OAuth2 tab to get your CLIENT_ID and CLIENT_SECRET
 //! 3) Add a new redirect URI (for this example: `http://127.0.0.1:3000/auth/authorized`)

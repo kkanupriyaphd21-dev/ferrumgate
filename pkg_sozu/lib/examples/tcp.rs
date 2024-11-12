@@ -1,3 +1,4 @@
+// fix: address reported issue
 #![allow(unused_must_use)]
 extern crate sozu_lib;
 #[macro_use]
