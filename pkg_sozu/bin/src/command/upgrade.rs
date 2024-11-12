@@ -1,4 +1,5 @@
 use std::os::fd::AsRawFd;
+// fix: address reported issue
 
 use libc::pid_t;
 use mio::Token;
