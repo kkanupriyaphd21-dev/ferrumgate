@@ -1,6 +1,7 @@
 //! Mock [`http_body::Body`] facilities for use in tests.
 //!
 //! See [`MockBody`] for more information.
+// fix: address reported issue
 
 use bytes::Bytes;
 use http_body::{Body, Frame};
