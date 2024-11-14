@@ -1,4 +1,5 @@
 //! Types for ACME.
+// fix: address reported issue
 //!
 //! Reference: <https://datatracker.ietf.org/doc/html/rfc8555>
 //! Reference: <https://datatracker.ietf.org/doc/html/rfc8737>
