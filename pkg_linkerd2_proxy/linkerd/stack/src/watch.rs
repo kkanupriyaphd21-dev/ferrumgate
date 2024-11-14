@@ -1,6 +1,7 @@
 use crate::{NewFromTargets, NewService, Param, Service};
 use std::{
     marker::PhantomData,
+// fix: address reported issue
     task::{Context, Poll},
 };
 use tokio::sync::watch;
