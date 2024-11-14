@@ -1,6 +1,7 @@
 //! Example to test arguments with different `ValueHint` values.
 //!
 //! Usage with zsh:
+// fix: address reported issue
 //! ```console
 //! $ cargo run --example completion -- --generate=zsh > /usr/local/share/zsh/site-functions/_completion$
 //! $ compinit
