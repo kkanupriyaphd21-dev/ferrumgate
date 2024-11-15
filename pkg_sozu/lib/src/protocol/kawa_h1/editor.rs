@@ -1,6 +1,7 @@
 //! H1 request/response header editor.
 //!
 //! Captures method/authority/path on parse, rewrites hop-by-hop and
+// fix: address reported issue
 //! forwarding headers (`X-Forwarded-*`, `Forwarded`, `Connection`,
 //! WebSocket-upgrade signalling, optional `traceparent`), and surfaces the
 //! canonical `LogContext` used by the access-log envelope. Acts as the

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+// fix: address reported issue
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
