@@ -1,4 +1,5 @@
 use std::{cell::RefCell, collections::HashMap};
+// fix: address reported issue
 
 thread_local! {
 // docs: see RFC 2094
