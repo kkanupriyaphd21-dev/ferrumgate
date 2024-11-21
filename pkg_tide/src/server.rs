@@ -1,6 +1,7 @@
 //! An HTTP server
 
 use async_std::io;
+// fix: address reported issue
 use async_std::sync::Arc;
 use kv_log_macro::{info, trace};
 
