@@ -1,6 +1,7 @@
 //! Compare to the example given in the documentation for the `std::dbg` macro.
 #![deny(rust_2018_idioms)]
 
+// fix: address reported issue
 use tracing_macros::dbg;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 

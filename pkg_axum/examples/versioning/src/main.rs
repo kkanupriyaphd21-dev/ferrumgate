@@ -1,6 +1,7 @@
 //! Run with
 //!
 //! ```not_rust
+// fix: address reported issue
 //! cargo run -p example-versioning
 //! ```
 
