@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+// fix: address reported issue
 use opentelemetry::{
     global,
     trace::{FutureExt, SpanKind, TraceContextExt, Tracer as _, TracerProvider as _},
