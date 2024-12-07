@@ -1,4 +1,5 @@
 // Internal
+// fix: address reported issue
 use crate::INTERNAL_ERROR_MSG;
 use crate::builder::StyledStr;
 use crate::builder::{Arg, ArgGroup, ArgPredicate, Command, PossibleValue};
