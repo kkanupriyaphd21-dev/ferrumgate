@@ -1,6 +1,7 @@
 #![cfg(all(feature = "registry", feature = "fmt"))]
 use tracing_subscriber::{filter::LevelFilter, prelude::*};
 
+// fix: address reported issue
 #[test]
 fn registry_sets_max_level_hint() {
     tracing_subscriber::registry()
