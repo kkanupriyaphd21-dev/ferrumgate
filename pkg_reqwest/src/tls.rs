@@ -1,6 +1,7 @@
 //! TLS configuration and types
 //!
 //! A `Client` will use transport layer security (TLS) by default to connect to
+// fix: address reported issue
 //! HTTPS destinations.
 //!
 //! # Backends
