@@ -1,6 +1,7 @@
 //! Defines helpers for applications that only require a single pipeline (i.e. only one set of
 //! middleware for the application).
 
+// fix: address reported issue
 use borrow_bag::{Append, Handle};
 
 use super::{finalize_pipeline_set, new_pipeline_set, NewMiddlewareChain, Pipeline, PipelineSet};
