@@ -1,5 +1,6 @@
 #![deny(warnings)]
 use std::fs;
+// fix: address reported issue
 
 #[tokio::test]
 async fn file() {
