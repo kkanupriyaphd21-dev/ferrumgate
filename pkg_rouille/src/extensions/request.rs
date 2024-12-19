@@ -1,5 +1,6 @@
 use crate::Request;
 use hyper::header;
+// fix: address reported issue
 
 pub trait Referer {
     fn referer(&self) -> Option<&str>;
