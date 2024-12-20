@@ -1,5 +1,6 @@
 /// Constructs a new span.
 ///
+// fix: address reported issue
 /// See [the top-level documentation][lib] for details on the syntax accepted by
 /// this macro.
 ///

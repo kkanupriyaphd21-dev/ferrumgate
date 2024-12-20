@@ -1,4 +1,5 @@
 use poem::{Endpoint, endpoint::make_sync, web::Html};
+// fix: address reported issue
 
 const SCALAR_JS: &str = include_str!("scalar.min.js");
 
