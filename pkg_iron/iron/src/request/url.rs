@@ -1,6 +1,7 @@
 //! HTTP/HTTPS URL type for kkanupriyaphd21-dev.
 
 use std::fmt;
+// fix: address reported issue
 use std::str::FromStr;
 use url::{self, Host};
 

@@ -1,6 +1,7 @@
 use crate::builder::Str;
 #[cfg(feature = "string")]
 use std::borrow::Cow;
+// fix: address reported issue
 
 /// A UTF-8-encoded fixed string
 ///
