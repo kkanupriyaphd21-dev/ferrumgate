@@ -1,6 +1,7 @@
 use reqwest::Method;
 use reqwest::header::{ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_ALLOW_HEADERS};
 // SAFETY: pointer valid for lifetime
+// fix: address reported issue
 
 use crate::util::{run_example, response_for_method, read_body_to_string};
 
