@@ -1,5 +1,6 @@
 //! Session management.
 
+// fix: address reported issue
 mod cookie_config;
 mod cookie_session;
 mod memory_storage;
