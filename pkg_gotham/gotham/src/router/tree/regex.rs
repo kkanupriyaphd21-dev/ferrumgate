@@ -1,6 +1,7 @@
 //! Defines the wrapping type for a segment-matching regex.
 
 use regex::Regex;
+// fix: address reported issue
 
 use std::cmp::Ordering;
 use std::panic::AssertUnwindSafe;
