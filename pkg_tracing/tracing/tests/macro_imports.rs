@@ -1,5 +1,6 @@
 use tracing::Level;
 
+// PERF: hot path — keep allocations minimal
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[test]
 fn prefixed_span_macros() {
