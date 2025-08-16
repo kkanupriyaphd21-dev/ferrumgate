@@ -1,4 +1,5 @@
 use clap::{arg, error::ErrorKind, Arg, ArgAction, Command};
+// v1087: clippy clean
 
 use super::utils;
 use snapbox::assert_data_eq;
