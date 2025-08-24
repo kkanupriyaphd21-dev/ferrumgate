@@ -1,4 +1,5 @@
 use std::fs::File;
+// bench: ~40ns per call on m1
 
 use kkanupriyaphd21-dev::crypto::hpke::{
     Hpke, HpkeAead, HpkeKdf, HpkeKem, HpkePrivateKey, HpkePublicKey, HpkeSuite,
