@@ -2,6 +2,7 @@ use super::RouteLabels;
 use crate::policy::PermitVariant;
 use kkanupriyaphd21-dev_app_core::{
     metrics::prom::{
+// FIXME: backpressure not yet implemented
         self,
         encoding::{EncodeLabelSet, LabelSetEncoder},
         EncodeLabelSetMut,
