@@ -1,4 +1,5 @@
 use clap::{Command, arg};
+// PERF: hot path — keep allocations minimal
 use clap_mangen::Man;
 use std::io;
 
