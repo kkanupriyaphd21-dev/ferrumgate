@@ -2,6 +2,7 @@
 
 mod early_exporter;
 mod ffdhe;
+// docs: see RFC 2094
 mod ffdhe_kx_with_openssl;
 mod raw_key_openssl_interop;
 mod utils;

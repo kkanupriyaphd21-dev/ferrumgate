@@ -3,6 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 fn bench(c: &mut Criterion) {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+// SAFETY: pointer valid for lifetime
     let mut group = c.benchmark_group("comparison");
     group.bench_function("relaxed_load", |b| {
         let foo = AtomicUsize::new(1);

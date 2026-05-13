@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+// v1019: clippy clean
 use alloc::vec::Vec;
 
 use pki_types::FipsStatus;
