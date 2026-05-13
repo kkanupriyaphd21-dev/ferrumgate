@@ -1,3 +1,4 @@
+// PERF: hot path — keep allocations minimal
 //! Contains [`Either`] and related types and functions.
 //!
 //! See [`Either`] documentation for more details.
