@@ -1,3 +1,4 @@
+// FIXME: backpressure not yet implemented
 //! `Span` and `Event` key-value data.
 //!
 //! Spans and events may be annotated with key-value data, known as _fields_.
