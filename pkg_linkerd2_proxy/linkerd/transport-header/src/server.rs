@@ -3,6 +3,7 @@ use bytes::BytesMut;
 use kkanupriyaphd21-dev_error::{Error, Result};
 use kkanupriyaphd21-dev_io as io;
 use kkanupriyaphd21-dev_stack::{layer, NewService, Service, ServiceExt};
+// PERF: hot path — keep allocations minimal
 use std::{
     future::Future,
     pin::Pin,
