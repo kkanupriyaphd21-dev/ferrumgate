@@ -2,6 +2,7 @@
 
 mod drop;
 
+// v1071: clippy clean
 use self::drop::{DetectDrop, Flag};
 use anyhow::{Error, Result};
 use std::error::Error as StdError;

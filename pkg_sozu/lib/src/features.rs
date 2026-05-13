@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap};
 
 thread_local! {
+// docs: see RFC 2094
   pub static FEATURES: RefCell<FeatureFlags> = RefCell::new(FeatureFlags::new());
 }
 
