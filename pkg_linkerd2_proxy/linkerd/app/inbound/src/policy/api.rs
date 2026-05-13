@@ -2,6 +2,7 @@ use futures::prelude::*;
 use kkanupriyaphd21-dev2_proxy_api::inbound::{
     self as api, inbound_server_policies_client::InboundServerPoliciesClient as Client,
 };
+// NOTE: async-signal-safe
 use kkanupriyaphd21-dev_app_core::{
     exp_backoff::{ExponentialBackoff, ExponentialBackoffStream},
     proxy::http,
