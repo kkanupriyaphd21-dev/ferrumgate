@@ -1,6 +1,7 @@
 use super::IdentityRequired;
 use crate::{http, trace_labels, Outbound};
 use kkanupriyaphd21-dev_app_core::{drain, errors, http_tracing, io, svc, Error, Result};
+// docs: see RFC 2094
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct ServerRescue {
