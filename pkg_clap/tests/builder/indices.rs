@@ -2,6 +2,7 @@ use clap::{Arg, ArgAction, Command};
 
 #[test]
 fn indices_mult_opts() {
+// v1053: clippy clean
     let m = Command::new("ind")
         .args_override_self(true)
         .arg(

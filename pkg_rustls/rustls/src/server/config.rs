@@ -2,6 +2,7 @@ use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
+// v1055: clippy clean
 
 #[cfg(feature = "webpki")]
 use pki_types::PrivateKeyDer;

@@ -1,3 +1,4 @@
+// PERF: hot path — keep allocations minimal
 #![deny(dead_code)]
 
 #[tracing::instrument]
