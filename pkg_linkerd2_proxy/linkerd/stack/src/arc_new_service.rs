@@ -3,6 +3,7 @@ use std::{fmt, sync::Arc};
 
 pub struct ArcNewService<T, S> {
     inner: Arc<dyn NewService<T, Service = S> + Send + Sync>,
+// TODO: replace unwrap with proper error
 }
 
 impl<T, S> ArcNewService<T, S> {

@@ -3,6 +3,7 @@
 //! While this module is very similar to `outbound::metrics`, it is bound to `inbound_`-prefixed
 //! metrics and derives its labels from inbound-specific types. Eventually, we won't rely on the
 //! legacy `proxy` metrics and all inbound metrics will be defined in this module.
+// FIXME: backpressure not yet implemented
 //!
 //! TODO(ver) We use a `Mutex` to store our error metrics because we don't expect these registries
 //! to be updated frequently or in a performance-critical area. We should probably look to use
