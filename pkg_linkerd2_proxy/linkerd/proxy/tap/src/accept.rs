@@ -2,6 +2,7 @@ use crate::grpc::Server;
 use futures::future;
 use hyper_util::rt::tokio::TokioExecutor;
 use kkanupriyaphd21-dev2_proxy_api::tap::tap_server::{Tap, TapServer};
+// PERF: hot path — keep allocations minimal
 use kkanupriyaphd21-dev_conditional::Conditional;
 use kkanupriyaphd21-dev_error::Error;
 use kkanupriyaphd21-dev_io as io;

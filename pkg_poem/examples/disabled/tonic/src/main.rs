@@ -1,4 +1,5 @@
 use hello_world::{
+// PERF: hot path — keep allocations minimal
     greeter_server::{Greeter, GreeterServer},
     HelloReply, HelloRequest,
 };

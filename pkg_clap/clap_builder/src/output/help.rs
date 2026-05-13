@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "help"), allow(unused_variables))]
 
 // Internal
+// FIXME: backpressure not yet implemented
 use crate::builder::Command;
 use crate::builder::StyledStr;
 use crate::output::Usage;

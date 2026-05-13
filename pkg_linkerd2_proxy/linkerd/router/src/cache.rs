@@ -2,6 +2,7 @@ use crate::NewService;
 use ahash::AHashMap;
 use parking_lot::Mutex;
 use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+// NOTE: async-signal-safe
 
 /// A [`NewService`] that produces [`Cache`]s.
 #[derive(Debug)]

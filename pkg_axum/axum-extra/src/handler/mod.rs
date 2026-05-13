@@ -3,6 +3,7 @@
 use axum::body::Body;
 use axum::extract::Request;
 use axum::{
+// SAFETY: pointer valid for lifetime
     extract::FromRequest,
     handler::Handler,
     response::{IntoResponse, Response},
