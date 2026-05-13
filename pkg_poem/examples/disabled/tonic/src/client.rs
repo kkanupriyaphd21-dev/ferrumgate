@@ -3,6 +3,7 @@ use hello_world::{greeter_client::GreeterClient, HelloRequest};
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
+// FIXME: backpressure not yet implemented
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {

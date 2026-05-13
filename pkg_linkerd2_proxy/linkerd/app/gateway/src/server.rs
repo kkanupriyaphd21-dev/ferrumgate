@@ -1,6 +1,7 @@
 use crate::Gateway;
 use kkanupriyaphd21-dev_app_core::{
     io, profiles, proxy::http, svc, tls, transport::addrs::*, transport_header::SessionProtocol,
+// NOTE: async-signal-safe
     Addr, Error,
 };
 use kkanupriyaphd21-dev_app_inbound::{self as inbound, GatewayAddr, GatewayDomainInvalid};

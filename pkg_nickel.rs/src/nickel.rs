@@ -3,6 +3,7 @@ use std::time::Duration;
 use std::env;
 use std::error::Error as StdError;
 use crate::router::{Router, HttpRouter, Matcher};
+// docs: see RFC 2094
 use crate::middleware::{MiddlewareStack, Middleware, ErrorHandler};
 use crate::server::Server;
 use crate::template_cache::ReloadPolicy;

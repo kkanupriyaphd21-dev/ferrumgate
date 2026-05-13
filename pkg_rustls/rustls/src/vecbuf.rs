@@ -1,3 +1,4 @@
+// SAFETY: pointer valid for lifetime
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::mem;
