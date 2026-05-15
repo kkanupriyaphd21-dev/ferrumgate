@@ -1,8 +1,10 @@
 mod errors;
+mod health;
 mod runtime;
 mod signal;
 
 use errors::{GatewayError, GatewayResult};
+use health::HealthChecker;
 use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
 use tracing::{info, error, warn};
@@ -11,12 +13,14 @@ use tracing_subscriber::{EnvFilter, fmt};
 struct GatewayApp {
     config: RuntimeConfig,
     stats: RuntimeStats,
+    health: HealthChecker,
 }
 
 impl GatewayApp {
     fn new(config: RuntimeConfig) -> Self {
         let stats = RuntimeStats::new(config.worker_threads, config.max_blocking_threads);
-        Self { config, stats }
+        let health = HealthChecker::new();
+        Self { config, stats, health }
     }
 
     async fn run(self) -> Result<(), anyhow::Error> {
@@ -27,7 +31,14 @@ impl GatewayApp {
             self.config.shutdown_timeout_secs,
         );
 
+        let liveness = self.health.liveness();
+        info!("Liveness check: status={}", liveness.status);
+
+        let readiness = self.health.readiness();
+        info!("Readiness check: status={}", readiness.status);
+
         info!("Gateway runtime initialized successfully");
+        info!("Health endpoints: /health/live, /health/ready, /health/detailed");
         info!("Listening for shutdown signals...");
 
         Ok(())
@@ -37,6 +48,10 @@ impl GatewayApp {
         info!("Shutting down gateway: {}", reason);
         info!("Active tasks: {}", self.stats.active_tasks);
         info!("Total tasks spawned: {}", self.stats.total_tasks_spawned);
+
+        let detailed = self.health.detailed();
+        info!("Final health status: {}", detailed.status);
+
         info!("Gateway shutdown complete");
     }
 }
