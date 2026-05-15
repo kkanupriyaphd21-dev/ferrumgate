@@ -1,12 +1,14 @@
 mod errors;
 mod health;
 mod metrics;
+mod retry;
 mod runtime;
 mod signal;
 
 use errors::{GatewayError, GatewayResult};
 use health::HealthChecker;
 use metrics::GatewayMetrics;
+use retry::RetryPolicy;
 use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
 use tracing::{info, error, warn};
