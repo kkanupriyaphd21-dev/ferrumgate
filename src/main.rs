@@ -1,10 +1,12 @@
 mod errors;
 mod health;
+mod metrics;
 mod runtime;
 mod signal;
 
 use errors::{GatewayError, GatewayResult};
 use health::HealthChecker;
+use metrics::GatewayMetrics;
 use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
 use tracing::{info, error, warn};
@@ -14,13 +16,15 @@ struct GatewayApp {
     config: RuntimeConfig,
     stats: RuntimeStats,
     health: HealthChecker,
+    metrics: GatewayMetrics,
 }
 
 impl GatewayApp {
     fn new(config: RuntimeConfig) -> Self {
         let stats = RuntimeStats::new(config.worker_threads, config.max_blocking_threads);
         let health = HealthChecker::new();
-        Self { config, stats, health }
+        let metrics = GatewayMetrics::new();
+        Self { config, stats, health, metrics }
     }
 
     async fn run(self) -> Result<(), anyhow::Error> {
@@ -37,8 +41,13 @@ impl GatewayApp {
         let readiness = self.health.readiness();
         info!("Readiness check: status={}", readiness.status);
 
+        let metrics_output = self.metrics.encode().unwrap_or_default();
+        let metric_count = metrics_output.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).count();
+        info!("Prometheus metrics initialized: {} metrics registered", metric_count);
+
         info!("Gateway runtime initialized successfully");
         info!("Health endpoints: /health/live, /health/ready, /health/detailed");
+        info!("Metrics endpoint: /metrics");
         info!("Listening for shutdown signals...");
 
         Ok(())
@@ -51,6 +60,9 @@ impl GatewayApp {
 
         let detailed = self.health.detailed();
         info!("Final health status: {}", detailed.status);
+
+        let metrics_output = self.metrics.encode().unwrap_or_default();
+        info!("Final metrics snapshot:\n{}", metrics_output);
 
         info!("Gateway shutdown complete");
     }
