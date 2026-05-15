@@ -1,6 +1,8 @@
+mod errors;
 mod runtime;
 mod signal;
 
+use errors::{GatewayError, GatewayResult};
 use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
 use tracing::{info, error, warn};
