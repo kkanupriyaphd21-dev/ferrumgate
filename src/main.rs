@@ -5,6 +5,7 @@ mod metrics;
 mod retry;
 mod runtime;
 mod signal;
+mod timeout;
 
 use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
@@ -13,6 +14,7 @@ use metrics::GatewayMetrics;
 use retry::RetryPolicy;
 use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
+use timeout::TimeoutConfig;
 use tracing::{info, error, warn};
 use tracing_subscriber::{EnvFilter, fmt};
 
