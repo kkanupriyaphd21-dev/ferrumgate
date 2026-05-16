@@ -1,6 +1,7 @@
 mod circuit_breaker;
 mod errors;
 mod health;
+mod load_balancer;
 mod logging;
 mod metrics;
 mod middleware;
