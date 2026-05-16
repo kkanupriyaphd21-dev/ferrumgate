@@ -1,3 +1,4 @@
+mod circuit_breaker;
 mod errors;
 mod health;
 mod metrics;
@@ -5,6 +6,7 @@ mod retry;
 mod runtime;
 mod signal;
 
+use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
 use health::HealthChecker;
 use metrics::GatewayMetrics;
