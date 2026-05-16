@@ -9,6 +9,7 @@ mod retry;
 mod runtime;
 mod signal;
 mod timeout;
+mod tls;
 
 use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
