@@ -1,3 +1,4 @@
+mod bulkhead;
 mod cache;
 mod circuit_breaker;
 mod compression;
