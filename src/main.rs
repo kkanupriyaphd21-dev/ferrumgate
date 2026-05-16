@@ -3,6 +3,7 @@ mod circuit_breaker;
 mod compression;
 mod errors;
 mod health;
+mod jwt_auth;
 mod load_balancer;
 mod logging;
 mod metrics;
