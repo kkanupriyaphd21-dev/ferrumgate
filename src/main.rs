@@ -1,6 +1,7 @@
 mod circuit_breaker;
 mod errors;
 mod health;
+mod logging;
 mod metrics;
 mod middleware;
 mod pool;
@@ -12,6 +13,7 @@ mod timeout;
 use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
 use health::HealthChecker;
+use logging::{LoggingConfig, init_tracing, log_session_event, log_pool_event, log_circuit_breaker_event, log_error_with_context};
 use metrics::GatewayMetrics;
 use middleware::{LoggingMiddleware, MiddlewareChain, RequestIdMiddleware, TimeoutMiddleware};
 use pool::ConnectionPool;
@@ -20,7 +22,6 @@ use runtime::{RuntimeConfig, RuntimeStats};
 use signal::{ShutdownCoordinator, ShutdownReason};
 use timeout::TimeoutConfig;
 use tracing::{info, error, warn};
-use tracing_subscriber::{EnvFilter, fmt};
 
 struct GatewayApp {
     config: RuntimeConfig,
@@ -78,21 +79,14 @@ impl GatewayApp {
     }
 }
 
-fn init_tracing() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,ferrumgate=debug"));
-
-    fmt()
-        .with_env_filter(env_filter)
-        .with_target(false)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .init();
+fn init_tracing_from_config() -> Result<(), anyhow::Error> {
+    let config = LoggingConfig::from_env()?;
+    init_tracing(&config)?;
+    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
-    init_tracing();
+    init_tracing_from_config()?;
 
     let config = RuntimeConfig::default();
     info!("Initializing Tokio runtime with {} worker threads", config.worker_threads);

@@ -11,8 +11,11 @@ tower = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["json", "time"] }
+tracing-appender = "0.2"
 anyhow = "1"
 thiserror = "1"
 prometheus-client = "0.22"
 uuid = { version = "1", features = ["v4"] }
+flate2 = "1"
+time = { version = "0.3", features = ["formatting"] }
