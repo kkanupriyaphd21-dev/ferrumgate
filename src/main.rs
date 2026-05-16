@@ -1,3 +1,4 @@
+mod cache;
 mod circuit_breaker;
 mod errors;
 mod health;
