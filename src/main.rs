@@ -1,5 +1,6 @@
 mod cache;
 mod circuit_breaker;
+mod compression;
 mod errors;
 mod health;
 mod load_balancer;
