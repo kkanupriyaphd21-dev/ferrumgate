@@ -13,6 +13,7 @@ mod signal;
 mod timeout;
 mod tls;
 mod tracing_ctx;
+mod validation;
 
 use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
