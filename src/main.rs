@@ -12,6 +12,7 @@ mod runtime;
 mod signal;
 mod timeout;
 mod tls;
+mod tracing_ctx;
 
 use circuit_breaker::CircuitBreaker;
 use errors::{GatewayError, GatewayResult};
