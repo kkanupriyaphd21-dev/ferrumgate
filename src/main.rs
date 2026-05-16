@@ -6,6 +6,7 @@ mod logging;
 mod metrics;
 mod middleware;
 mod pool;
+mod rate_limiter;
 mod retry;
 mod runtime;
 mod signal;
